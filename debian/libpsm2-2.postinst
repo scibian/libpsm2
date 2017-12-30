@@ -1,0 +1,25 @@
+#!/bin/sh
+
+set -e
+
+case "${1}" in
+        configure)
+                if [ -n "$(find /dev -type f -name "hfi1_[0-9]" -or -name "hfi1" -prune -print0 2>/dev/null)" ];
+                then
+                        udevadm control --reload-rules > /dev/null 2>&1
+                fi
+                ;;
+
+        abort-upgrade|abort-remove|abort-deconfigure)
+
+                ;;
+
+        *)
+                echo "postinst called with unknown argument \`${1}'" >&2
+                exit 1
+                ;;
+esac
+
+#DEBHELPER#
+
+exit 0

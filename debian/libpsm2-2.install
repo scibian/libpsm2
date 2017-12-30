@@ -1,0 +1,2 @@
+usr/lib/libpsm2.so.*
+lib/udev/rules.d/40-psm.rules

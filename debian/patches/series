@@ -1,0 +1,3 @@
+0001-Makefile-arch.patch
+0002-Add-hfi1_user.h.patch
+0003-Use-locally-provided-hfi1_user.h.patch

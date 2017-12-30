@@ -1,0 +1,13 @@
+#!/bin/sh
+
+set -e
+
+if [ "$1" != "upgrade" ]
+then
+    update-alternatives --remove libpsm_infinipath.so.1 \
+    /usr/lib/psm2-compat/libpsm_infinipath.so.1
+fi
+
+#DEBHELPER#
+
+exit 0

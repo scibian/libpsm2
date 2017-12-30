@@ -1,0 +1,48 @@
+From: Mehdi Dogguy <mehdi.dogguy@edf.fr>
+Date: Wed, 27 Dec 2017 15:48:24 +0100
+Subject: Use locally provided hfi1_user.h
+
+---
+ Makefile                  | 1 +
+ include/hfi1_deprecated.h | 2 +-
+ include/opa_common.h      | 2 +-
+ 3 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index 6619bc5..2133b3c 100644
+--- a/Makefile
++++ b/Makefile
+@@ -332,6 +332,7 @@ endif
+ 	install -m 0644 -D include/opa_byteorder.h ${DESTDIR}/usr/include/hfi1diag/opa_byteorder.h
+ 	install -m 0644 -D include/psm2_mock_testing.h ${DESTDIR}/usr/include/hfi1diag/psm2_mock_testing.h
+ 	install -m 0644 -D include/hfi1_deprecated.h ${DESTDIR}/usr/include/hfi1diag/hfi1_deprecated.h
++	install -m 0644 -D include/hfi1_user.h ${DESTDIR}/usr/include/hfi1diag/hfi1_user.h
+ 	install -m 0644 -D include/opa_revision.h ${DESTDIR}/usr/include/hfi1diag/opa_revision.h
+ 	install -m 0644 -D psmi_wrappers.h ${DESTDIR}/usr/include/hfi1diag/psmi_wrappers.h
+ 
+diff --git a/include/hfi1_deprecated.h b/include/hfi1_deprecated.h
+index f935aac..a2a314a 100644
+--- a/include/hfi1_deprecated.h
++++ b/include/hfi1_deprecated.h
+@@ -67,7 +67,7 @@
+ 
+ /* First, include the current hfi1_user.h file: */
+ 
+-#include <rdma/hfi/hfi1_user.h>
++#include "hfi1_user.h"
+ 
+ /* Determine if we need to define and declare deprecated
+    entities based on the IB_IOCTL_MAGIC macro. */
+diff --git a/include/opa_common.h b/include/opa_common.h
+index 1e89b69..4cf4734 100644
+--- a/include/opa_common.h
++++ b/include/opa_common.h
+@@ -56,7 +56,7 @@
+ #ifndef OPA_COMMON_H
+ #define OPA_COMMON_H
+ 
+-#include <rdma/hfi/hfi1_user.h>
++#include "hfi1_user.h"
+ #include "hfi1_deprecated.h"
+ 
+ #endif /* OPA_COMMON_H */

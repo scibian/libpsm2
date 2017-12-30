@@ -1,0 +1,29 @@
+#!/bin/sh
+
+set -e
+
+case "${1}" in
+        configure)
+                if [ -e /dev/ipath ]
+                then
+                        udevadm control --reload-rules > /dev/null 2>&1
+                        udevadm test -a -p  $(udevadm info -q path -n /dev/ipath) > /dev/null 2>&1
+                fi
+
+		update-alternatives --install /usr/lib/x86_64-linux-gnu/libpsm_infinipath.so.1 libpsm_infinipath.so.1 \
+		/usr/lib/psm2-compat/libpsm_infinipath.so.1 80
+
+                ;;
+        abort-upgrade|abort-remove|abort-deconfigure)
+
+                ;;
+
+        *)
+                echo "postinst called with unknown argument \`${1}'" >&2
+                exit 1
+                ;;
+esac
+
+#DEBHELPER#
+
+exit 0

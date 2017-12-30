@@ -1,0 +1,90 @@
+libpsm2 (10.2.235-1-1ifs+c9u6) calibre9; urgency=medium
+
+  * Install hfi1_user.h next to other headers files, in /usr/include/hfi1diag/
+
+ -- Mehdi Dogguy <mehdi.dogguy@edf.fr>  Sun, 31 Dec 2017 00:33:13 +0100
+
+libpsm2 (10.2.235-1-1ifs+c9u5) calibre9; urgency=medium
+
+  * Add include/hfi1_user.h to avoid importing ifs-kernel-updates-dev
+    with a lot of not needed kernel stuff (This interface file is included
+    in recent kernels).
+    - 0002-Add-hfi1_user.h.patch
+    - 0003-Use-locally-provided-hfi1_user.h.patch
+    - Remove ifs-kernel-updates-dev from Build-Depends
+
+ -- Mehdi Dogguy <mehdi.dogguy@edf.fr>  Tue, 26 Dec 2017 12:03:49 +0100
+
+libpsm2 (10.2.235-1-1ifs+c9u4) calibre9; urgency=medium
+
+  * Add a postinst for libpsm2-2 which reloads udev rules
+  * Remove libhfi1-dev from Build-Depends. Only ifs-kernel-updates-dev
+    is needed.
+
+ -- Mehdi Dogguy <mehdi.dogguy@edf.fr>  Thu, 21 Dec 2017 09:21:56 +0100
+
+libpsm2 (10.2.235-1-1ifs+c9u3) calibre9; urgency=medium
+
+  * Add ifs-kernel-updates-dev to Build-Depends
+
+ -- Mehdi Dogguy <mehdi.dogguy@edf.fr>  Tue, 19 Dec 2017 10:35:30 +0100
+
+libpsm2 (10.2.235-1-1ifs+c9u2) calibre9; urgency=medium
+
+  * Add libhfi1-dev to Build-Depends
+  * Add a debian/gbp.conf file
+
+ -- Mehdi Dogguy <mehdi.dogguy@edf.fr>  Tue, 19 Dec 2017 10:00:39 +0100
+
+libpsm2 (10.2.235-1-1ifs+c9u1) calibre9; urgency=medium
+
+  * Build for calibre9
+
+ -- Mehdi Dogguy <mehdi.dogguy@edf.fr>  Fri, 15 Dec 2017 18:10:49 +0100
+
+libpsm2 (10.2.235-1-1ifs) UNRELEASED; urgency=medium
+
+  * Import libpsm2 10.2.235-1 from IFS 10.5.0.0.155 upstream.
+  * Changed libpsm2 binary package to libpsm2-2, clean up lintian
+    soname mismatch.
+
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Mon, 18 Sep 2017 14:15:29 -0500
+
+libpsm2 (10.2.175-1-1ifs) UNRELEASED; urgency=medium
+
+  * Import libpsm2 10.2.175-1 from IFS 10.4.2.0.7 upstream.
+
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Tue, 11 Jul 2017 14:12:22 -0500
+
+libpsm2 (10.2.63-1-1ifs) UNRELEASED; urgency=medium
+
+  * Convert to quilt.
+
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Wed, 07 Jun 2017 19:11:31 -0500
+
+libpsm2 (10.2.63) UNRELEASED; urgency=medium
+
+  * Imported libpsm2 10.2.63 from IFS 10.3.1.0.19 upstream
+  * Corrected computation of size for job_key
+
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Tue, 30 May 2017 10:24:35 -0500
+
+libpsm2 (10.2.59.1) UNRELEASED; urgency=medium
+
+  * Imported libpsm2 10.2.59-1 from IFS 10.3.0.1.5 upstream
+
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Fri, 06 Jan 2017 18:18:35 -0600
+
+libpsm2 (10.2.58) UNRELEASED; urgency=medium
+
+  * Imported libpsm2 10.2.58 from IFS 10.3.0.0.81 upstream
+
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Fri, 16 Dec 2016 18:04:35 -0600
+
+libpsm2 (10.2.42.1) UNRELEASED; urgency=medium
+
+  * Imported libpsm2 10.2.42-1 from IFS 10.2.0.0.158 upstream
+  * Replaces hfi1-psm, hfi1-psm-dev and hfi1-psm-compat
+
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Fri, 30 Sep 2016 13:31:35 -0500
+

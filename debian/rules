@@ -1,0 +1,21 @@
+#!/usr/bin/make -f
+
+#export DH_VERBOSE=1
+export DEB_BUILD_MAINT_OPTIONS=hardening=+all
+
+# Specify the library installation directory
+export LIBDIR=/usr/lib
+
+%:
+	dh $@ --parallel
+
+override_dh_strip:
+	dh_strip --dbg-package=libpsm2-dbg
+
+override_dh_installdocs:
+	dh_installdocs --link-doc=libpsm2-2
+
+override_dh_auto_clean:
+
+
+
