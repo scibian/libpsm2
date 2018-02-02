@@ -9,7 +9,7 @@ Copyright: 2003-2017 Intel Corporation
 License: GPL-2 or BSD-3-clause
 
 Files: debian/*
-Copyright: 2016-2017 System Fabric Works, Inc.
+Copyright: 2016-2018 System Fabric Works, Inc.
 License: GPL-2 or BSD-3-clause
 
 License: GPL-2
@@ -35,8 +35,8 @@ License: GPL-2
  `/usr/share/common-licenses/GPL-2'.
 
 License: BSD-3-Clause
- Copyright (c) 2015 Intel Corporation. All rights reserved. 
- Copyright (c) 2016 System Fabric Works. All rights reserved.
+ Copyright (c) 2015 Intel Corporation. All rights reserved.
+ Copyright (c) 2016-2018 System Fabric Works. All rights reserved.
  .
  Redistribution and use in source and binary forms, with or without
  modification, are permitted provided that the following conditions are met:
@@ -63,4 +63,3 @@ License: BSD-3-Clause
  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  POSSIBILITY OF SUCH DAMAGE.
-

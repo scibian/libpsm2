@@ -50,7 +50,7 @@
 #
 Summary: Intel PSM2 Libraries
 Name: libpsm2
-Version: 10.2.232
+Version: 10.3.3
 Release: 1
 License: BSD or GPLv2
 URL: https://github.com/01org/opa-psm2/
@@ -58,13 +58,22 @@ URL: https://github.com/01org/opa-psm2/
 # The tarball can be created by:
 # git clone https://github.com/01org/opa-psm2
 # cd opa-psm2
-# git checkout 3b080d9fc259faf3a088c351b35a4144bad7c534
+# git checkout DIST_SHA
 # make dist
-Source0: %{name}-%{version}.tar.gz
+Source0: libpsm2-%{version}.tar.gz
 
-# The OPA product is supported on x86 64 only:
+# The OPA product is supported on x86_64 only:
 ExclusiveArch: x86_64
 
+BuildRequires: gcc
+Provides: hfi1-psm
+Obsoletes: hfi1-psm < 1.0.0
+
+%if ""
+%package -n libpsm2
+%endif
+Summary: Intel PSM2 Libraries
+Provides: libpsm2
 %if 0%{?suse_version}
 BuildRequires: libnuma-devel
 Requires: libnuma1
@@ -76,17 +85,13 @@ Requires: numactl-libs
 %endif
 %endif
 
-BuildRequires: gcc
-Provides: hfi1-psm
-Obsoletes: hfi1-psm < 1.0.0
-
-%package devel
+%package -n libpsm2-devel
 Summary: Development files for Intel PSM2
 Requires: %{name}%{?_isa} = %{version}-%{release}
 Provides: hfi1-psm-devel
 Obsoletes: hfi1-psm-devel < 1.0.0
 
-%package compat
+%package -n libpsm2-compat
 Summary: Compat library for Intel PSM2
 Requires: %{name}%{?_isa} = %{version}-%{release}
 %if 0%{?fedora}
@@ -95,18 +100,36 @@ Requires: systemd-udev
 Provides: hfi1-psm-compat
 Obsoletes: hfi1-psm-compat < 1.0.0
 
+# If an alternate basename is defined, like in SLES >=12.3
+# Then we generate a different base src.rpm, so use this
+# description instead.
+%if ""
 %description
-The PSM2 Messaging API, or PSM2 API, is the low-level
+The source code for the PSM2 messaging API, libpsm2.
+A low-level user-level communications interface for the Intel(R) OPA
+family of products. PSM2 users are enabled with mechanisms
+necessary to implement higher level communications
+interfaces in parallel environments.
+%endif
+
+# In distro's other than SLES >=12.3 we use a single description
+# for both the .src.rpm and the base binary rpm. As the
+# RPM_NAME_BASEEXT defaults to empty contents.
+%description -n libpsm2
+PSM2 Messaging API, or PSM2 API, is the low-level
 user-level communications interface for the Intel(R) OPA
 family of products. PSM2 users are enabled with mechanisms
 necessary to implement higher level communications
 interfaces in parallel environments.
 
-%description devel
-Development files for the Intel PSM2 library
+%description -n libpsm2-devel
+Intel(R) PSM2, psm2*.h, headers and libpsm2.so files necessary
+for developing software using libpsm2.
 
-%description compat
-Support for MPIs linked with PSM versions < 2
+%description -n libpsm2-compat
+Support for MPIs linked with PSM versions < 2. This will allow
+software compiled to use Intel(R) Truescale PSM, libinfinipath, to run
+with Intel(R) OPA PSM2, libpsm2.
 
 %prep
 %setup -q -n libpsm2-%{version}
@@ -121,7 +144,7 @@ make %{?_smp_mflags}
 %post -p /sbin/ldconfig
 %postun -p /sbin/ldconfig
 
-%files
+%files -n libpsm2
 %if 0%{?rhel} && 0%{?rhel} < 7
 %{!?_licensedir:%global license %doc}
 %endif
@@ -130,14 +153,14 @@ make %{?_smp_mflags}
 %{_libdir}/libpsm2.so.2
 %{_udevrulesdir}/40-psm.rules
 
-%files devel
+%files -n libpsm2-devel
 %{_libdir}/libpsm2.so
 %{_includedir}/psm2.h
 %{_includedir}/psm2_mq.h
 %{_includedir}/psm2_am.h
 %{_includedir}/hfi1diag
 
-%files compat
+%files -n libpsm2-compat
 %{_libdir}/psm2-compat
 %if 0%{?rhel} && 0%{?rhel} < 7
 /usr/lib/udev/rules.d/40-psm-compat.rules
@@ -148,5 +171,7 @@ make %{?_smp_mflags}
 %{_prefix}/lib/libpsm2
 
 %changelog
-* Tue Apr 05 2016 Paul Reger <paul.j.reger@intel.com> - 10.2.232
+* Wed Aug 30 2017 Rusell McGuire <russell.w.mcguire@intel.com>
+- Adjust RPM names to match SLES 12.3 distro names
+* Tue Apr 05 2016 Paul Reger <paul.j.reger@intel.com>
 - Upstream PSM2 source code for Fedora.

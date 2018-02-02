@@ -1,46 +1,15 @@
-libpsm2 (10.2.235-1-1ifs+c9u6) calibre9; urgency=medium
+libpsm2 (10.3.3-1-2ifs+deb9) UNRELEASED; urgency=medium
 
-  * Install hfi1_user.h next to other headers files, in /usr/include/hfi1diag/
+  * Branch for stretch.
 
- -- Mehdi Dogguy <mehdi.dogguy@edf.fr>  Sun, 31 Dec 2017 00:33:13 +0100
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Fri, 02 Feb 2018 11:15:22 -0600
 
-libpsm2 (10.2.235-1-1ifs+c9u5) calibre9; urgency=medium
+libpsm2 (10.3.3-1-1ifs) UNRELEASED; urgency=medium
 
-  * Add include/hfi1_user.h to avoid importing ifs-kernel-updates-dev
-    with a lot of not needed kernel stuff (This interface file is included
-    in recent kernels).
-    - 0002-Add-hfi1_user.h.patch
-    - 0003-Use-locally-provided-hfi1_user.h.patch
-    - Remove ifs-kernel-updates-dev from Build-Depends
+  * Import libpsm2 10.3.3-1 from IFS 10.6.0.0.134 upstream.
+  * Use git packaging and pristine-tar.
 
- -- Mehdi Dogguy <mehdi.dogguy@edf.fr>  Tue, 26 Dec 2017 12:03:49 +0100
-
-libpsm2 (10.2.235-1-1ifs+c9u4) calibre9; urgency=medium
-
-  * Add a postinst for libpsm2-2 which reloads udev rules
-  * Remove libhfi1-dev from Build-Depends. Only ifs-kernel-updates-dev
-    is needed.
-
- -- Mehdi Dogguy <mehdi.dogguy@edf.fr>  Thu, 21 Dec 2017 09:21:56 +0100
-
-libpsm2 (10.2.235-1-1ifs+c9u3) calibre9; urgency=medium
-
-  * Add ifs-kernel-updates-dev to Build-Depends
-
- -- Mehdi Dogguy <mehdi.dogguy@edf.fr>  Tue, 19 Dec 2017 10:35:30 +0100
-
-libpsm2 (10.2.235-1-1ifs+c9u2) calibre9; urgency=medium
-
-  * Add libhfi1-dev to Build-Depends
-  * Add a debian/gbp.conf file
-
- -- Mehdi Dogguy <mehdi.dogguy@edf.fr>  Tue, 19 Dec 2017 10:00:39 +0100
-
-libpsm2 (10.2.235-1-1ifs+c9u1) calibre9; urgency=medium
-
-  * Build for calibre9
-
- -- Mehdi Dogguy <mehdi.dogguy@edf.fr>  Fri, 15 Dec 2017 18:10:49 +0100
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Tue, 17 Oct 2017 15:34:11 -0500
 
 libpsm2 (10.2.235-1-1ifs) UNRELEASED; urgency=medium
 

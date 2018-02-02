@@ -1,0 +1,4 @@
+etc/modprobe.d/libpsm2-compat.conf
+lib/udev/rules.d/40-psm-compat.rules
+usr/lib/*/psm2-compat/libpsm_infinipath.so.*
+usr/lib/libpsm2/libpsm2-compat.cmds

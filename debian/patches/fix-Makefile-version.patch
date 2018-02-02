@@ -1,25 +1,18 @@
 Description: Correct computation of version and arch in makery.
  Use uname -m to compute the build machine architecture. Add SFW
  copyrights to Makery.
- .
- libpsm2 (10.2.63-1ifs) UNRELEASED; urgency=medium
- .
-   * Converted to quilt format.
 Author: Brian T. Smith <bsmith@systemfabricworks.com>
-Copyright: 2017 System Fabric Works, Inc.
-
----
-
 Forwarded: yes, https://github.com/01org/opa-psm2/pull/13/commits/8a207592eda0816402a826dd61fba31eb66f3d5a
-Last-Update: <2017-07-12>
-
+Last-Update: <2017-12-12>
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
 --- a/Makefile
 +++ b/Makefile
 @@ -176,14 +176,18 @@
  
  export 	LIBPSM2_COMPAT_CONF_DIR
  
-+VERSION=$(shell grep Version: debian/libpsm2.spec | cut -f2 -d: | sed 's/ //')
++VERSION=$(shell grep Version: debian/rhel/libpsm2.spec | cut -f2 -d: | sed 's/ //')
 +
 +# VERSION comes from the specfile
  # The desired version number comes from the most recent tag starting with "v"
@@ -35,25 +28,3 @@ Last-Update: <2017-07-12>
  
  # On github, the last commit for each release should be the one to bump up
  # the release extension number in 'rpm_release_extension'. Further commits
---- a/buildflags.mak
-+++ b/buildflags.mak
-@@ -58,7 +58,7 @@
- endif
- 
- export os ?= $(shell uname -s | tr '[A-Z]' '[a-z]')
--export arch := $(shell uname -p | sed -e 's,\(i[456]86\|athlon$$\),i386,')
-+export arch := $(shell uname -m | sed -e 's,\(i[456]86\|athlon$$\),i386,')
- 
- ifeq (${CCARCH},gcc)
- 	export CC := gcc
---- a/compat/buildflags.mak
-+++ b/compat/buildflags.mak
-@@ -54,7 +54,7 @@
- endif
- 
- export os ?= $(shell uname -s | tr '[A-Z]' '[a-z]')
--export arch := $(shell uname -p | sed -e 's,\(i[456]86\|athlon$$\),i386,')
-+export arch := $(shell uname -m | sed -e 's,\(i[456]86\|athlon$$\),i386,')
- export CCARCH ?= gcc
- 
- ifeq (${CCARCH},gcc)
