@@ -1,9 +1,11 @@
 Source: libpsm2
-Maintainer: Brian T. Smith <bsmith@systemfabricworks.com>
+Maintainer: Scibian Project <packaging@scibian.org>
 Section: libs
 Priority: extra
 Standards-Version: 3.9.8
 Homepage: http://www.intel.com
+Vcs-Git: https://github.com/scibian/libpsm2.git
+Vcs-Browser: https://github.com/scibian/libpsm2
 Build-Depends: debhelper (>= 10),
                libnuma-dev,
                quilt,
