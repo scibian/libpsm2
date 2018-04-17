@@ -1,4 +1,10 @@
-libpsm2 (10.3.3-1-2ifs+deb9) UNRELEASED; urgency=medium
+libpsm2 (10.3.3-1-2ifs+deb9sci9u1) scibian9; urgency=medium
+
+  * Scibian9 Release.
+
+ -- Thomas Hamel <thomas-externe.hamel@edf.fr>  Tue, 17 Apr 2018 15:22:58 +0200
+
+libpsm2 (10.3.3-1-2ifs+deb9) unstable; urgency=medium
 
   * Branch for stretch.
 
