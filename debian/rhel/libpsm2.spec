@@ -50,7 +50,7 @@
 #
 Summary: Intel PSM2 Libraries
 Name: libpsm2
-Version: 10.3.3
+Version: 10.3.35
 Release: 1
 License: BSD or GPLv2
 URL: https://github.com/01org/opa-psm2/
@@ -58,7 +58,7 @@ URL: https://github.com/01org/opa-psm2/
 # The tarball can be created by:
 # git clone https://github.com/01org/opa-psm2
 # cd opa-psm2
-# git checkout DIST_SHA
+# git checkout 81a3f06cb764af3238ac326c5f69e24393bae85f
 # make dist
 Source0: libpsm2-%{version}.tar.gz
 
@@ -73,7 +73,8 @@ Obsoletes: hfi1-psm < 1.0.0
 %package -n libpsm2
 %endif
 Summary: Intel PSM2 Libraries
-Provides: libpsm2
+Provides: libpsm2 = %{version}-%{release}
+Provides: libpsm2%{_isa} = %{version}-%{release}
 %if 0%{?suse_version}
 BuildRequires: libnuma-devel
 Requires: libnuma1
@@ -155,6 +156,7 @@ make %{?_smp_mflags}
 
 %files -n libpsm2-devel
 %{_libdir}/libpsm2.so
+%{_libdir}/libpsm2.a
 %{_includedir}/psm2.h
 %{_includedir}/psm2_mq.h
 %{_includedir}/psm2_am.h

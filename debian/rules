@@ -1,19 +1,61 @@
 #!/usr/bin/make -f
+# -*- mode: makefile; coding: utf-8 -*-
 
 #export DH_VERBOSE=1
-#export DEB_BUILD_MAINT_OPTIONS=hardening=+all,-pie
+export DEB_BUILD_MAINT_OPTIONS=hardening=+all,-pie
+LIBDIR=/usr/lib/$(DEB_HOST_MULTIARCH)
+DESTDIR=$$PWD/debian/tmp
 
-# Specify the library installation directory
-export LIBDIR=/usr/lib/$(DEB_HOST_MULTIARCH)
+PSM_LIB_MAJOR := $(shell printf "%d" `sed -n 's/^\#define.*PSM2_VERNO_COMPAT_MAJOR.*0x0\?\([1-9a-f]\?[0-9a-f]\+\).*/\1/p' $(CURDIR)/psm2.h`)
+PSM_LIB_VERSION := $(PSM_LIB_MAJOR)
+
+MAINT_SCRIPTS=debian/libpsm2-2-compat.postinst \
+	debian/libpsm2-2-compat.prerm \
+	debian/libpsm2-2-compat.postrm
 
 %:
 	dh $@ --parallel --with autoreconf
+
+debian/%.postinst: debian/%.postinst.in
+	sed -e 's/@DEB_HOST_MULTIARCH@/$(DEB_HOST_MULTIARCH)/g' 	\
+		-e 's/@PSM_LIB_VERSION@/$(PSM_LIB_VERSION)/g'		\
+		-e 's/@PSM_LIB_MAJOR@/$(PSM_LIB_MAJOR)/g'		\
+		$< > $@
+
+debian/%.prerm: debian/%.prerm.in
+	sed	-e 's/@DEB_HOST_MULTIARCH@/$(DEB_HOST_MULTIARCH)/g'	\
+		-e 's/@PSM_LIB_VERSION@/$(PSM_LIB_VERSION)/g'		\
+		-e 's/@PSM_LIB_MAJOR@/$(PSM_LIB_MAJOR)/g'		\
+		$< > $@
+
+debian/%.postrm: debian/%.postrm.in
+	sed	-e 's/@DEB_HOST_MULTIARCH@/$(DEB_HOST_MULTIARCH)/g'	\
+		-e 's/@PSM_LIB_VERSION@/$(PSM_LIB_VERSION)/g'		\
+		-e 's/@PSM_LIB_MAJOR@/$(PSM_LIB_MAJOR)/g'		\
+		$< > $@
+
+.PHONY: override_dh_auto_build
+override_dh_auto_build: $(MAINT_SCRIPTS)
+	dh_auto_build
 
 .PHONY: override_dh_installdocs
 override_dh_installdocs:
 	dh_installdocs --link-doc=libpsm2-2
 
-# Prevent useless call to ldconfig for compat library
+.PHONY: override_dh_auto_clean
+override_dh_auto_clean:
+	dh_auto_clean
+	rm -f $(MAINT_SCRIPTS)
+
+.PHONY: override_dh_auto_install
+override_dh_auto_install:
+	dh_auto_install -- DESTDIR=$(DESTDIR) LIBDIR=$(LIBDIR)
+	mv $(DESTDIR)/usr/lib/libpsm2 $(DESTDIR)/usr/lib/libpsm2-2
+	mv $(DESTDIR)/$(LIBDIR)/psm2-compat/libpsm_infinipath.so.* $(DESTDIR)/usr/lib/libpsm2-2/
+	sed -i 's~/libpsm2/~/libpsm2-2/~g' $(DESTDIR)/etc/modprobe.d/libpsm2-compat.conf
+	rmdir $(DESTDIR)/$(LIBDIR)/psm2-compat/
+
+# libpsm2-2 contains the compatibility library. Don't process it for dependencies.
 .PHONY: override_dh_makeshlibs
 override_dh_makeshlibs:
-	dh_makeshlibs -X$(LIBDIR)/psm2-compat
+	dh_makeshlibs -X/usr/lib/psm2-compat

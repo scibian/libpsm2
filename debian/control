@@ -6,6 +6,7 @@ Standards-Version: 3.9.8
 Homepage: http://www.intel.com
 Build-Depends: debhelper (>= 10),
                libnuma-dev,
+               dh-autoreconf,
                quilt,
                systemd,
 

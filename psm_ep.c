@@ -55,7 +55,6 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <fcntl.h>
 #include <sched.h>		/* cpu_set */
 #include <ctype.h>		/* isalpha */
 
@@ -63,6 +62,9 @@
 #include "psm_mq_internal.h"
 #include "psm_am_internal.h"
 
+#ifdef PSM_CUDA
+#include "psm_gdrcpy.h"
+#endif
 /*
  * Endpoint management
  */
@@ -1076,6 +1078,11 @@ __psm2_ep_open(psm2_uuid_t const unique_job_key,
 		}
 	}
 
+#ifdef PSM_CUDA
+	if (PSMI_IS_GDR_COPY_ENABLED)
+		hfi_gdr_open();
+#endif
+
 	err = __psm2_ep_open_internal(unique_job_key,
 				     devid_enabled, opts_i, mq, &ep, &epid);
 	if (err != PSM2_OK)
@@ -1142,6 +1149,17 @@ psm2_error_t __psm2_ep_close(psm2_ep_t ep, int mode, int64_t timeout_in)
 		t_start = get_cycles();
 	}
 #endif
+
+#ifdef PSM_CUDA
+	/*
+	 * The close on the gdr fd needs to be called before the
+	 * close on the hfi fd as the the gdr device will hold
+	 * reference count on the hfi device which will make the close
+	 * on the hfi fd return without actually closing the fd.
+	 */
+	if (PSMI_IS_GDR_COPY_ENABLED)
+		hfi_gdr_close();
+#endif
 	union psmi_envvar_val timeout_intval;
 	psm2_ep_t tmp;
 	psm2_mq_t mmq;
@@ -1204,6 +1222,22 @@ psm2_error_t __psm2_ep_close(psm2_ep_t ep, int mode, int64_t timeout_in)
 	 * timeout.  There's no good way to do this until we change the PTL
 	 * interface to allow asynchronous finalization
 	 */
+
+
+	/* Check if transfer ownership of receive thread is needed before closing ep.
+	 * In case of PSM2_MULTI_EP support receive thread is created and assigned
+	 * to first opened endpoint. Receive thread is killed when closing this
+	 * endpoint.
+	 */
+	if (ep->user_ep_next != NULL) {
+		/* Receive thread will be transfered and assigned to ep->user_ep_next
+		 * only if currently working receive thread (which will be killed) is
+		 * assigned to ep and there isn't any assigned to ep->user_ep_next.
+		 */
+		if ((psmi_ptl_ips_rcvthread.is_enabled(ep->ptl_ips.ptl)) &&
+		    (!psmi_ptl_ips_rcvthread.is_enabled(ep->user_ep_next->ptl_ips.ptl)))
+			psmi_ptl_ips_rcvthread.transfer_ownership(ep->ptl_ips.ptl, ep->user_ep_next->ptl_ips.ptl);
+	}
 
 	/*
 	 * Before freeing the master ep itself,
