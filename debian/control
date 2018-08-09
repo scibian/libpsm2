@@ -8,6 +8,7 @@ Vcs-Git: https://github.com/scibian/libpsm2.git
 Vcs-Browser: https://github.com/scibian/libpsm2
 Build-Depends: debhelper (>= 10),
                libnuma-dev,
+               dh-autoreconf,
                quilt,
                systemd,
 

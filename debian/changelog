@@ -1,3 +1,17 @@
+libpsm2 (10.3.35-1-1ifs+deb9sci9+opa10.7u1) scibian9+opa10.7; urgency=medium
+
+  * Scibian9 release with opa10.7 
+
+ -- Nicolas Meaux <nicolas-externe.meaux@edf.fr>  Thu, 09 Aug 2018 15:34:36 +0200
+
+libpsm2 (10.3.35-1-1ifs+deb9) UNRELEASED; urgency=medium
+
+  * Import libpsm2 10.3.35-1 from IFS 10.7.0.0.145 upstream.
+  * Manage /dev/ipath during compat package install/uninstall.
+  * Use debian alternatives for compat library.
+
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Fri, 29 Jun 2018 16:45:13 -0500
+
 libpsm2 (10.3.3-1-2ifs+deb9sci9+opa10.6u1) scibian9+opa10.6; urgency=medium
 
   * Strict Scibian aspects compliance.
