@@ -5,7 +5,7 @@
 
   GPL LICENSE SUMMARY
 
-  Copyright(c) 2015 Intel Corporation.
+  Copyright(c) 2018 Intel Corporation.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -21,7 +21,7 @@
 
   BSD LICENSE
 
-  Copyright(c) 2015 Intel Corporation.
+  Copyright(c) 2018 Intel Corporation.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -51,17 +51,27 @@
 
 */
 
-/* Copyright (c) 2003-2014 Intel Corporation. All rights reserved. */
+/* Copyright (c) 2003-2018 Intel Corporation. All rights reserved. */
+#ifndef GDR_CPY_H
+#define GDR_CPY_H
+#ifdef PSM_CUDA
 
-#ifndef _PTL_FWD_IPS_H
-#define _PTL_FWD_IPS_H
-#include "ptl.h"
+#include "ptl_ips/ips_proto.h"
 
-typedef struct ips_epaddr ips_epaddr_t;
-typedef struct ips_msgctl ips_msgctl_t;
+#define GDR_FD get_gdr_fd()
 
-/* Symbol in ips ptl */
-struct ptl_ctl_init psmi_ptl_ips;
+int get_gdr_fd();
 
-struct ptl_ctl_rcvthread psmi_ptl_ips_rcvthread;
-#endif /* _PTL_FWD_IPS_H */
+void hfi_gdr_open();
+
+void hfi_gdr_close();
+
+void *
+gdr_convert_gpu_to_host_addr(int gdr_fd, unsigned long buf,
+				size_t size, int flags,
+				struct ips_proto* proto);
+
+uint64_t
+gdr_cache_evict();
+#endif
+#endif
