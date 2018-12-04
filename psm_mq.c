@@ -56,6 +56,7 @@
 #include <sched.h>
 
 #include "psm_user.h"
+#include "psm2_hal.h"
 #include "psm_mq_internal.h"
 
 #ifdef PSM_CUDA
@@ -285,71 +286,27 @@ int mq_req_remove_single(psm2_mq_t mq, psm2_mq_req_t req)
 
 void MOCKABLE(psmi_mq_mtucpy)(void *vdest, const void *vsrc, uint32_t nchars)
 {
-	unsigned char *dest = (unsigned char *)vdest;
-	const unsigned char *src = (const unsigned char *)vsrc;
 
 #ifdef PSM_CUDA
 	if (PSMI_IS_CUDA_ENABLED && (PSMI_IS_CUDA_MEM(vdest) || PSMI_IS_CUDA_MEM((void *) vsrc))) {
-		PSMI_CUDA_CALL(cudaMemcpy,
-			       vdest, vsrc, nchars, cudaMemcpyDefault);
+		PSMI_CUDA_CALL(cuMemcpy,
+			       (CUdeviceptr)vdest, (CUdeviceptr)vsrc, nchars);
 		return;
 	}
 #endif
+	memcpy(vdest, vsrc, nchars);
+	return;
 
-	if (nchars >> 2)
-		hfi_dwordcpy((uint32_t *) dest, (uint32_t *) src, nchars >> 2);
-	dest += (nchars >> 2) << 2;
-	src += (nchars >> 2) << 2;
-	switch (nchars & 0x03) {
-	case 3:
-		*dest++ = *src++;
-	case 2:
-		*dest++ = *src++;
-	case 1:
-		*dest++ = *src++;
-	}
+
 }
 MOCK_DEF_EPILOGUE(psmi_mq_mtucpy);
 
 void psmi_mq_mtucpy_host_mem(void *vdest, const void *vsrc, uint32_t nchars)
 {
-	unsigned char *dest = (unsigned char *)vdest;
-	const unsigned char *src = (const unsigned char *)vsrc;
-
-	if (nchars >> 2)
-		hfi_dwordcpy((uint32_t *) dest, (uint32_t *) src, nchars >> 2);
-	dest += (nchars >> 2) << 2;
-	src += (nchars >> 2) << 2;
-	switch (nchars & 0x03) {
-	case 3:
-		*dest++ = *src++;
-	case 2:
-		*dest++ = *src++;
-	case 1:
-		*dest++ = *src++;
-	}
+	memcpy(vdest, vsrc, nchars);
+	return;
 }
 
-#if 0				/* defined(__x86_64__) No consumers of mtucpy safe */
-void psmi_mq_mtucpy_safe(void *vdest, const void *vsrc, uint32_t nchars)
-{
-	unsigned char *dest = (unsigned char *)vdest;
-	const unsigned char *src = (const unsigned char *)vsrc;
-	if (nchars >> 2)
-		hfi_dwordcpy_safe((uint32_t *) dest, (uint32_t *) src,
-				  nchars >> 2);
-	dest += (nchars >> 2) << 2;
-	src += (nchars >> 2) << 2;
-	switch (nchars & 0x03) {
-	case 3:
-		*dest++ = *src++;
-	case 2:
-		*dest++ = *src++;
-	case 1:
-		*dest++ = *src++;
-	}
-}
-#endif
 
 PSMI_ALWAYS_INLINE(
 psm2_mq_req_t
@@ -739,15 +696,6 @@ __psm2_mq_isend2(psm2_mq_t mq, psm2_epaddr_t dest, uint32_t flags,
 				   req);
 	PSMI_UNLOCK(mq->progress_lock);
 
-#if 0
-#ifdef PSM_VALGRIND
-	/* If the send isn't completed yet, make sure that we mark the memory as
-	 * unaccessible
-	 */
-	if (*req != PSM2_MQ_REQINVALID && (*req)->state != MQ_STATE_COMPLETE)
-		VALGRIND_MAKE_MEM_NOACCESS(buf, len);
-#endif
-#endif
 	psmi_assert(*req != NULL);
 	psmi_assert_req_not_internal(*req);
 
@@ -779,15 +727,6 @@ __psm2_mq_isend(psm2_mq_t mq, psm2_epaddr_t dest, uint32_t flags, uint64_t stag,
 				   req);
 	PSMI_UNLOCK(mq->progress_lock);
 
-#if 0
-#ifdef PSM_VALGRIND
-	/* If the send isn't completed yet, make sure that we mark the memory as
-	 * unaccessible
-	 */
-	if (*req != PSM2_MQ_REQINVALID && (*req)->state != MQ_STATE_COMPLETE)
-		VALGRIND_MAKE_MEM_NOACCESS(buf, len);
-#endif
-#endif
 	psmi_assert(*req != NULL);
 	psmi_assert_req_not_internal(*req);
 
@@ -823,7 +762,7 @@ __psm2_mq_send(psm2_mq_t mq, psm2_epaddr_t dest, uint32_t flags, uint64_t stag,
 	psm2_error_t err;
 	psm2_mq_tag_t tag;
 
-	PSM2_LOG_MSG("entering");
+	PSM2_LOG_MSG("entering stag: 0x%" PRIx64, stag);
 
 	*((uint64_t *) tag.tag) = stag;
 	tag.tag[2] = 0;
@@ -907,10 +846,6 @@ psm2_mq_irecv_inner(psm2_mq_t mq, psm2_mq_req_t req, void *buf, uint32_t len)
 				(buf, (const void *)req->buf,
 				       req->recv_msgoff);
 		}
-		/* What's "left" is no access */
-		VALGRIND_MAKE_MEM_NOACCESS((void *)((uintptr_t) buf +
-						    req->recv_msgoff),
-					   len - req->recv_msgoff);
 		psmi_mq_sysbuf_free(mq, req->buf);
 
 		req->state = MQ_STATE_MATCHED;
@@ -933,10 +868,6 @@ psm2_mq_irecv_inner(psm2_mq_t mq, psm2_mq_req_t req, void *buf, uint32_t len)
 				(buf, (const void *)req->buf,
 				       req->recv_msgoff);
 		}
-		/* What's "left" is no access */
-		VALGRIND_MAKE_MEM_NOACCESS((void *)((uintptr_t) buf +
-						    req->recv_msgoff),
-					   len - req->recv_msgoff);
 		if (req->send_msgoff) {
 			psmi_mq_sysbuf_free(mq, req->buf);
 		}
@@ -1020,9 +951,6 @@ __psm2_mq_irecv2(psm2_mq_t mq, psm2_epaddr_t src,
 			req->user_gpu_buffer = NULL;
 #endif
 
-		/* Nobody should touch the buffer after it's posted */
-		VALGRIND_MAKE_MEM_NOACCESS(buf, len);
-
 		mq_add_to_expected_hashes(mq, req);
 		_HFI_VDBG("buf=%p,len=%d,tag=%08x.%08x.%08x "
 			  " tagsel=%08x.%08x.%08x req=%p\n",
@@ -1066,7 +994,7 @@ __psm2_mq_irecv(psm2_mq_t mq, uint64_t tag, uint64_t tagsel, uint32_t flags,
 
 	*reqo = NULL;
 
-	PSM2_LOG_MSG("entering");
+	PSM2_LOG_MSG("entering tag: 0x%" PRIx64, tag);
 
 	*(uint64_t *) rtag.tag = tag;
 #ifdef PSM_DEBUG
@@ -1194,6 +1122,38 @@ __psm2_mq_ipeek(psm2_mq_t mq, psm2_mq_req_t *oreq, psm2_mq_status_t *status)
 }
 PSMI_API_DECL(psm2_mq_ipeek)
 
+psm2_error_t __psm2_mq_ipeek_dequeue(psm2_mq_t mq, psm2_mq_req_t *oreq)
+{
+	psm2_mq_req_t req;
+
+	PSMI_ASSERT_INITIALIZED();
+	PSMI_LOCK(mq->progress_lock);
+	if (mq->completed_q.first == NULL)
+		psmi_poll_internal(mq->ep, 1);
+	if ((req = mq->completed_q.first) == NULL) {
+		PSMI_UNLOCK(mq->progress_lock);
+		return PSM2_MQ_NO_COMPLETIONS;
+	}
+	mq_qq_remove(&mq->completed_q, req);
+	PSMI_UNLOCK(mq->progress_lock);
+	*oreq = req;
+	return PSM2_OK;
+}
+PSMI_API_DECL(psm2_mq_ipeek_dequeue)
+
+psm2_error_t __psm2_mq_req_free(psm2_mq_t mq, psm2_mq_req_t req)
+{
+	PSMI_ASSERT_INITIALIZED();
+	if (req == NULL)
+		return PSM2_OK;
+	PSMI_LOCK(mq->progress_lock);
+	psmi_mq_req_free(req);
+	PSMI_UNLOCK(mq->progress_lock);
+
+	return PSM2_OK;
+}
+PSMI_API_DECL(psm2_mq_req_free)
+
 static
 psm2_error_t psmi_mqopt_ctl(psm2_mq_t mq, uint32_t key, void *value, int get)
 {
@@ -1257,6 +1217,112 @@ psm2_error_t __psm2_mq_setopt(psm2_mq_t mq, int key, const void *value)
 }
 PSMI_API_DECL(psm2_mq_setopt)
 
+#define TAB_SIZE 16
+#define STATS				\
+	STAT(rx_user_num)		\
+	STAT(rx_sys_bytes)		\
+	STAT(rx_sys_num)		\
+	STAT(tx_num)			\
+	STAT(tx_eager_num)		\
+	STAT(tx_eager_bytes)		\
+	STAT(tx_rndv_num)		\
+	STAT(tx_rndv_bytes)		\
+	STAT(tx_shm_num)		\
+	STAT(rx_shm_num)		\
+	STAT(rx_sysbuf_num)		\
+	STAT(rx_sysbuf_bytes)
+
+static
+void
+psmi_mq_print_stats(psm2_mq_t mq, FILE *perf_stats_fd)
+{
+	psm2_mq_stats_t stats;
+	char msg_buffer[MSG_BUFFER_LEN];
+
+	psm2_mq_get_stats(mq, &stats);
+
+#define STAT(x) \
+	snprintf(msg_buffer, MSG_BUFFER_LEN, "%*lu",TAB_SIZE, stats.x); \
+	fwrite(msg_buffer, sizeof(char), strlen(msg_buffer), perf_stats_fd);
+
+	STATS
+
+#undef STAT
+
+	fwrite("\n", sizeof(char), 1, perf_stats_fd);
+}
+
+
+static
+void
+*psmi_mq_print_stats_thread(void *_mq)
+{
+	psm2_mq_t mq = (psm2_mq_t)_mq;
+	char perf_file_name[MSG_BUFFER_LEN];
+	char msg_buffer[MSG_BUFFER_LEN];
+	int delta_t = 0;
+
+	snprintf(perf_file_name, MSG_BUFFER_LEN, "./psm2-perf-stat-ep-%" PRIu64 "-pid-%d",
+			(uint64_t)(mq->ep->epid),
+			getpid());
+	FILE *perf_stats_fd = fopen(perf_file_name, "w+");
+
+	if (!perf_stats_fd)
+	{
+		_HFI_ERROR("Failed to create fd for performance logging\n");
+		goto end;
+	}
+
+#define STAT(x) \
+	snprintf(msg_buffer, MSG_BUFFER_LEN, "%*s",TAB_SIZE, #x);\
+	fwrite(msg_buffer, sizeof(char), strlen(msg_buffer), perf_stats_fd);
+
+	STAT(delta_t)
+	STATS
+
+#undef STAT
+
+	fwrite("\n", sizeof(char), 1, perf_stats_fd);
+
+	/* Performance stats will be printed every $PSM2_MQ_PRINT_STATS seconds */
+	do {
+		snprintf(msg_buffer, MSG_BUFFER_LEN, "%*d",TAB_SIZE, delta_t);
+		fwrite(msg_buffer, sizeof(char), strlen(msg_buffer), perf_stats_fd);
+		psmi_mq_print_stats(mq, perf_stats_fd);
+		fflush(perf_stats_fd);
+		usleep(MICRO_SEC * mq->print_stats);
+		delta_t += mq->print_stats;
+	} while (mq->mq_perf_data.perf_print_stats);
+
+	fclose(perf_stats_fd);
+end:
+	pthread_exit(NULL);
+}
+
+static
+void
+psmi_mq_print_stats_init(psm2_mq_t mq)
+{
+	mq->mq_perf_data.perf_print_stats = 1;
+	if (pthread_create(&(mq->mq_perf_data.perf_print_thread), NULL,
+				psmi_mq_print_stats_thread, (void*)mq))
+	{
+		mq->mq_perf_data.perf_print_stats = 0;
+		_HFI_ERROR("Failed to create logging thread\n");
+	}
+}
+
+static
+void
+psmi_mq_print_stats_finalize(psm2_mq_t mq)
+{
+	if (mq->mq_perf_data.perf_print_stats)
+	{
+		mq->mq_perf_data.perf_print_stats = 0;
+		pthread_join(mq->mq_perf_data.perf_print_thread, NULL);
+	}
+}
+
 /*
  * This is the API for the user.  We actually allocate the MQ much earlier, but
  * the user can set options after obtaining an endpoint
@@ -1296,36 +1362,14 @@ __psm2_mq_init(psm2_ep_t ep, uint64_t tag_order_mask,
 
 	*mqo = mq;
 
+	if (mq->print_stats > 0)
+		psmi_mq_print_stats_init(mq);
+
 fail:
 	PSM2_LOG_MSG("leaving");
 	return err;
 }
 PSMI_API_DECL(psm2_mq_init)
-
-static
-void
-psmi_mq_print_stats(psm2_mq_t mq)
-{
-	psm2_mq_stats_t stats;
-
-	psm2_mq_get_stats(mq, &stats);
-	_HFI_INFO("rx_user_bytes %lu\n", stats.rx_user_bytes);
-	_HFI_INFO("rx_user_num %lu\n", stats.rx_user_num);
-	_HFI_INFO("rx_sys_bytes %lu\n", stats.rx_sys_bytes);
-	_HFI_INFO("rx_sys_num %lu\n", stats.rx_sys_num);
-
-	_HFI_INFO("tx_num %lu\n", stats.tx_num);
-	_HFI_INFO("tx_eager_num %lu\n", stats.tx_eager_num);
-	_HFI_INFO("tx_eager_bytes %lu\n", stats.tx_eager_bytes);
-	_HFI_INFO("tx_rndv_num %lu\n", stats.tx_rndv_num);
-	_HFI_INFO("tx_rndv_bytes %lu\n", stats.tx_rndv_bytes);
-
-	_HFI_INFO("tx_shm_num %lu\n", stats.tx_shm_num);
-	_HFI_INFO("rx_shm_num %lu\n", stats.rx_shm_num);
-
-	_HFI_INFO("rx_sysbuf_num %lu\n", stats.rx_sysbuf_num);
-	_HFI_INFO("rx_sysbuf_bytes %lu\n", stats.rx_sysbuf_bytes);
-}
 
 psm2_error_t __psm2_mq_finalize(psm2_mq_t mq)
 {
@@ -1335,8 +1379,13 @@ psm2_error_t __psm2_mq_finalize(psm2_mq_t mq)
 
 	PSMI_ERR_UNLESS_INITIALIZED(mq->ep);
 
+	if (mq->print_stats == -1)
+	{
+		mq->print_stats = 1;
+		psmi_mq_print_stats_init(mq);
+	}
 	if (mq->print_stats != 0)
-		psmi_mq_print_stats(mq);
+		psmi_mq_print_stats_finalize(mq);
 
 	PSM2_LOG_MSG("leaving");
 	return rv;
@@ -1442,7 +1491,9 @@ psm2_error_t psmi_mq_initialize_defaults(psm2_mq_t mq)
 	mq->shm_thresh_rv = env_shmrv.e_uint;
 
 	psmi_getenv("PSM2_MQ_PRINT_STATS",
-		    "Print MQ stats during finalization",
+		    "Prints MQ performance stats every n seconds to file"
+			"./psm2-perf-stat-ep-[epid]-[pid] when set to -1 stats are "
+			"printed only once during finalization",
 		    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
 		    (union psmi_envvar_val) 0, &env_stats);
 	mq->print_stats = env_stats.e_uint;

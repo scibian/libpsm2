@@ -1,0 +1,71 @@
+Description:  Remove unnecessary long waiting timeout for HFI driver
+ Patch from upstream commit 4c06f904 to prevent waiting 15s for the
+ hfi1 device to appear.
+Origin: https://github.com/intel/opa-psm2/commit/4c06f904fe71c2518d3dfc838ae228809810b75d
+Last-Update: 2018-11-30
+Bug-Intel: https://github.com/intel/opa-psm2/issues/33
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+--- a/psm2_hal.c
++++ b/psm2_hal.c
+@@ -189,40 +189,30 @@
+ 		    PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_INT,
+ 		    (union psmi_envvar_val)PSM_HAL_INSTANCE_ANY_GEN, &env_hi_pref);
+ 
+-	int wait; /* loop control variable */
+-	/* Optimization note:
+-	   The following code attempts to initialize two different times:
+-	   First time assumes that the driver is already up, and so it attempts to
+-	   initialize with the loop control variable: wait, set to 0.
+-	   The second time, when wait is set to 1, waits for the driver to come up.
+-	   (When the parameter to: hfp_get_num_units() call below is 0,
+-	   hfp_get_num_units() does not wait for the driver to come up.
+-	   When the parameter is non-zero, the hfp_get_num_units() call below,
+-	   will wait for the driver to come up.) */
+-	for (wait=0;wait <= 1;wait++)
++	int wait = 0;
++	/* The hfp_get_num_units() call below, will not wait for the HFI driver
++	   to come up and create device nodes in /dev/.) */
++	struct _psmi_hal_instance *p;
++	SLIST_FOREACH(p, &head_hi, next_hi)
+ 	{
+-		struct _psmi_hal_instance *p;
+-		SLIST_FOREACH(p, &head_hi, next_hi)
++		if ((env_hi_pref.e_int == PSM_HAL_INSTANCE_ANY_GEN) ||
++		    (p->type == env_hi_pref.e_int))
+ 		{
+-			if ((env_hi_pref.e_int == PSM_HAL_INSTANCE_ANY_GEN) ||
+-			    (p->type           == env_hi_pref.e_int))
++			int nunits = p->hfp_get_num_units(wait);
++			int nports = p->hfp_get_num_ports();
++			int dflt_pkey = p->hfp_get_default_pkey();
++			if (nunits > 0 && nports > 0 && dflt_pkey > 0)
+ 			{
+-				int nunits = p->hfp_get_num_units(wait);
+-				int nports = p->hfp_get_num_ports();
+-				int dflt_pkey = p->hfp_get_default_pkey();
+-				if (nunits > 0 && nports > 0 && dflt_pkey > 0)
++				memset(&p->params,0,sizeof(p->params));
++				int rv = p->hfp_initialize(p);
++				if (!rv)
+ 				{
+-					memset(&p->params,0,sizeof(p->params));
+-					int rv = p->hfp_initialize(p);
+-					if (!rv)
+-					{
+-						sysfs_init(p->hfi_sys_class_path);
+-						p->params.num_units = nunits;
+-						p->params.num_ports = nports;
+-						p->params.default_pkey = dflt_pkey;
+-						psmi_hal_current_hal_instance = p;
+-						return rv;
+-					}
++					sysfs_init(p->hfi_sys_class_path);
++					p->params.num_units = nunits;
++					p->params.num_ports = nports;
++					p->params.default_pkey = dflt_pkey;
++					psmi_hal_current_hal_instance = p;
++					return rv;
+ 				}
+ 			}
+ 		}
