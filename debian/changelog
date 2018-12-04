@@ -1,10 +1,4 @@
-libpsm2 (11.2.23-1-1ifs+deb9sci9+opa10.8u1) scibian9+opa10.8; urgency=medium
-
-  * Import Upstream version 11.2.23-1
-
- -- Thomas HAMEL <thomas-externe.hamel@edf.fr>  Tue, 12 Feb 2019 19:25:57 +0100
-
-libpsm2 (11.2.23-1-1ifs+deb9) stretch; urgency=medium
+libpsm2 (11.2.23-1-1ifs+deb8) jessie; urgency=medium
 
   * Import libpsm2 11.2.23-1 from IFS RHEL75 10.8.0.0.204 upstream.
   * Correct call to udevadm in package trigger scripts.
@@ -12,37 +6,13 @@ libpsm2 (11.2.23-1-1ifs+deb9) stretch; urgency=medium
 
  -- Brian T. Smith <bsmith@systemfabricworks.com>  Tue, 04 Dec 2018 13:38:28 -0600
 
-libpsm2 (10.3.35-1-1ifs+deb9sci9+opa10.7u1) scibian9+opa10.7; urgency=medium
-
-  * Scibian9 release with opa10.7 
-
- -- Nicolas Meaux <nicolas-externe.meaux@edf.fr>  Thu, 09 Aug 2018 15:34:36 +0200
-
-libpsm2 (10.3.35-1-1ifs+deb9) stretch; urgency=medium
+libpsm2 (10.3.35-1-1ifs+deb8) jessie; urgency=medium
 
   * Import libpsm2 10.3.35-1 from IFS 10.7.0.0.145 upstream.
   * Manage /dev/ipath during compat package install/uninstall.
   * Use debian alternatives for compat library.
 
- -- Brian T. Smith <bsmith@systemfabricworks.com>  Fri, 29 Jun 2018 16:45:13 -0500
-
-libpsm2 (10.3.3-1-2ifs+deb9sci9+opa10.6u1) scibian9+opa10.6; urgency=medium
-
-  * Strict Scibian aspects compliance.
-
- -- Thomas Hamel <thomas-externe.hamel@edf.fr>  Wed, 18 Apr 2018 15:39:32 +0200
-
-libpsm2 (10.3.3-1-2ifs+deb9sci9u1) scibian9; urgency=medium
-
-  * Scibian9 Release.
-
- -- Thomas Hamel <thomas-externe.hamel@edf.fr>  Tue, 17 Apr 2018 15:22:58 +0200
-
-libpsm2 (10.3.3-1-2ifs+deb9) stretch; urgency=medium
-
-  * Branch for stretch.
-
- -- Brian T. Smith <bsmith@systemfabricworks.com>  Fri, 02 Feb 2018 11:15:22 -0600
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Thu, 21 Jun 2018 12:44:09 -0500
 
 libpsm2 (10.3.3-1-1ifs) jessie; urgency=medium
 

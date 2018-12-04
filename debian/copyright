@@ -26,8 +26,9 @@ Copyright: 1995-2005 Jean-loup Gailly and Mark Adler
 License: BSD-3-Clause/zlib
 
 Files: debian/*
-Copyright: 2018 Scibian Project <legal@scibian.org>
-License: GPL-2 or BSD-3-clause
+Copyright: 2016-2018 System Fabric Works, Inc.
+           2017 Intel Corporation
+License: GPL-2 or BSD-3-Clause/Intel
 
 License: GPL-2
  On Debian systems, the full text of the GNU General Public
