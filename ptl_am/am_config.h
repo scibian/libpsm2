@@ -5,7 +5,7 @@
 
   GPL LICENSE SUMMARY
 
-  Copyright(c) 2015 Intel Corporation.
+  Copyright(c) 2018 Intel Corporation.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -21,7 +21,7 @@
 
   BSD LICENSE
 
-  Copyright(c) 2015 Intel Corporation.
+  Copyright(c) 2018 Intel Corporation.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -51,47 +51,32 @@
 
 */
 
-/* Copyright (c) 2003-2014 Intel Corporation. All rights reserved. */
+#ifndef PTL_AM_AM_CONFIG_H
+#define PTL_AM_AM_CONFIG_H
 
-#include "ips_subcontext.h"
-#include "ips_spio.h"
-#include "ips_tid.h"
-#include "ips_tidflow.h"
-#include "ptl_ips.h"
+#include "psm_config.h"
 
-psm2_error_t
-ips_subcontext_ureg_get(ptl_t *ptl, uint32_t subcontext_cnt,
-			psmi_context_t *context,
-			struct ips_subcontext_ureg **uregp)
-{
-	const struct hfi1_base_info *base_info = &context->ctrl->base_info;
-	uintptr_t all_subcontext_uregbase =
-	    (uintptr_t) base_info->subctxt_uregbase;
-	int i;
+/*
+ * Can change the rendezvous threshold based on usage of cma (or not)
+ */
+#define PSMI_MQ_RV_THRESH_CMA      16000
 
-	psmi_assert_always(all_subcontext_uregbase != 0);
-	for (i = 0; i < HFI1_MAX_SHARED_CTXTS; i++) {
-		struct ips_subcontext_ureg *subcontext_ureg =
-		    (struct ips_subcontext_ureg *)all_subcontext_uregbase;
-		*uregp++ = (i < subcontext_cnt) ? subcontext_ureg : NULL;
-		all_subcontext_uregbase += sizeof(struct ips_subcontext_ureg);
-	}
+/* If no kernel assisted copy is available this is the rendezvous threshold */
+#define PSMI_MQ_RV_THRESH_NO_KASSIST 16000
 
-	ptl->recvshc->hwcontext_ctrl =
-	    (struct ips_hwcontext_ctrl *)all_subcontext_uregbase;
-	all_subcontext_uregbase += sizeof(struct ips_hwcontext_ctrl);
+#define AMSH_HAVE_CMA   0x1
+#define AMSH_HAVE_KASSIST 0x1
 
-	context->spio_ctrl = (void *)all_subcontext_uregbase;
-	all_subcontext_uregbase += sizeof(struct ips_spio_ctrl);
+/* Each block reserves some space at the beginning to store auxiliary data */
+#define AMSH_BLOCK_HEADER_SIZE  4096
 
-	context->tid_ctrl = (void *)all_subcontext_uregbase;
-	all_subcontext_uregbase += sizeof(struct ips_tid_ctrl);
+/* AMLONG_SZ is the total size in memory of a bulk packet, including an
+ * am_pkt_bulk_t header struct.
+ * AMLONG_MTU is the number of bytes available in a bulk packet for payload. */
+#define AMLONG_SZ   8192
+#define AMLONG_MTU (AMLONG_SZ-sizeof(am_pkt_bulk_t))
 
-	context->tf_ctrl = (void *)all_subcontext_uregbase;
-	all_subcontext_uregbase += sizeof(struct ips_tf_ctrl);
+#define PSMI_KASSIST_MODE_DEFAULT PSMI_KASSIST_CMA_GET
+#define PSMI_KASSIST_MODE_DEFAULT_STRING  "cma-get"
 
-	psmi_assert((all_subcontext_uregbase -
-		     (uintptr_t) base_info->subctxt_uregbase) <= PSMI_PAGESIZE);
-
-	return PSM2_OK;
-}
+#endif /* PTL_AM_AM_CONFIG_H */

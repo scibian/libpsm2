@@ -18,8 +18,10 @@ libpsm2.so.2 libpsm2-2 #MINVER#
  psm2_am_get_parameters@PSM2_1.0 10.2
  psm2_am_get_source@PSM2_1.0 10.2
  psm2_am_register_handlers@PSM2_1.0 10.2
+ psm2_am_register_handlers_2@PSM2_1.0 11.2.18
  psm2_am_reply_short@PSM2_1.0 10.2
  psm2_am_request_short@PSM2_1.0 10.2
+ psm2_am_unregister_handlers@PSM2_1.0 11.2.18
  psm2_capabilities_bitset@PSM2_1.0 10.3.0
  psm2_ep_close@PSM2_1.0 10.2
  psm2_ep_connect@PSM2_1.0 10.2
@@ -57,12 +59,14 @@ libpsm2.so.2 libpsm2-2 #MINVER#
  psm2_mq_init@PSM2_1.0 10.2
  psm2_mq_ipeek2@PSM2_1.0 10.2
  psm2_mq_ipeek@PSM2_1.0 10.2
+ psm2_mq_ipeek_dequeue@PSM2_1.0 11.2.18
  psm2_mq_iprobe2@PSM2_1.0 10.2
  psm2_mq_iprobe@PSM2_1.0 10.2
  psm2_mq_irecv2@PSM2_1.0 10.2
  psm2_mq_irecv@PSM2_1.0 10.2
  psm2_mq_isend2@PSM2_1.0 10.2
  psm2_mq_isend@PSM2_1.0 10.2
+ psm2_mq_req_free@PSM2_1.0 11.2.18
  psm2_mq_send2@PSM2_1.0 10.2
  psm2_mq_send@PSM2_1.0 10.2
  psm2_mq_setopt@PSM2_1.0 10.2

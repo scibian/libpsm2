@@ -5,7 +5,7 @@
 
   GPL LICENSE SUMMARY
 
-  Copyright(c) 2016 Intel Corporation.
+  Copyright(c) 2017 Intel Corporation.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -21,7 +21,7 @@
 
   BSD LICENSE
 
-  Copyright(c) 2016 Intel Corporation.
+  Copyright(c) 2017 Intel Corporation.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -51,7 +51,7 @@
 
 */
 
-/* Copyright (c) 2003-2016 Intel Corporation. All rights reserved. */
+/* Copyright (c) 2003-2017 Intel Corporation. All rights reserved. */
 
 /* included header files  */
 #include <stdlib.h>
@@ -62,7 +62,7 @@
 
 #include "ips_proto.h"
 #include "ips_proto_internal.h"
-#include "ips_spio.h"
+#include "psm_hal_gen1_spio.h"
 #include "ipserror.h"		/* ips error codes */
 #include "ips_proto_params.h"
 
@@ -82,30 +82,24 @@ static psm2_error_t spio_reset_hfi_shared(struct ips_spio *ctrl);
 static psm2_error_t spio_credit_return_update(struct ips_spio *ctrl);
 static psm2_error_t spio_credit_return_update_shared(struct ips_spio *ctrl);
 
-psm2_error_t
+static PSMI_HAL_INLINE psm2_error_t
 ips_spio_init(const struct psmi_context *context, struct ptl *ptl,
 	      struct ips_spio *ctrl)
 {
-	const struct hfi1_base_info *base_info = &context->ctrl->base_info;
-	const struct hfi1_ctxt_info *ctxt_info = &context->ctrl->ctxt_info;
 	cpuid_t id;
 	int i;
+	hfp_gen1_pc_private *psm_hw_ctxt = context->psm_hw_ctxt;
+	struct _hfi_ctrl *con_ctrl = psm_hw_ctxt->ctrl;
 
 	ctrl->ptl = ptl;
 	ctrl->context = context;
-	/* Copy runtime flags */
-	ctrl->runtime_flags = ptl->runtime_flags;
 	ctrl->unit_id = context->ep->unit_id;
 	ctrl->portnum = context->ep->portnum;
 
 	pthread_spin_init(&ctrl->spio_lock, PTHREAD_PROCESS_PRIVATE);
-	ctrl->spio_credits_addr =
-	    (__le64 *) (ptrdiff_t) base_info->sc_credits_addr;
-	ctrl->spio_bufbase_sop =
-	    (uint64_t *) (ptrdiff_t) base_info->pio_bufbase_sop;
-	ctrl->spio_bufbase =
-	    (uint64_t *) (ptrdiff_t) base_info->pio_bufbase;
-	ctrl->spio_event = (uint64_t *) (ptrdiff_t) base_info->events_bufbase;
+	ctrl->spio_credits_addr = (volatile __le64 *)  con_ctrl->base_info.sc_credits_addr;
+	ctrl->spio_bufbase_sop  = (volatile uint64_t *)con_ctrl->base_info.pio_bufbase_sop;
+	ctrl->spio_bufbase      = (volatile uint64_t *)con_ctrl->base_info.pio_bufbase;
 
 	ctrl->spio_consecutive_failures = 0;
 	ctrl->spio_num_stall = 0ULL;
@@ -114,7 +108,7 @@ ips_spio_init(const struct psmi_context *context, struct ptl *ptl,
 	ctrl->spio_last_stall_cyc = 0ULL;
 	ctrl->spio_init_cyc = get_cycles();
 
-	ctrl->spio_total_blocks = ctxt_info->credits;
+	ctrl->spio_total_blocks = con_ctrl->ctxt_info.credits;
 	ctrl->spio_block_index = 0;
 
 	ctrl->spio_ctrl = (struct ips_spio_ctrl *)context->spio_ctrl;
@@ -138,7 +132,7 @@ ips_spio_init(const struct psmi_context *context, struct ptl *ptl,
 	/*
 	 * Only the master process can initialize.
 	 */
-	if (ctxt_info->subctxt == 0) {
+	if (psmi_hal_get_subctxt(context->psm_hw_ctxt) == 0) {
 		pthread_spin_init(&ctrl->spio_ctrl->spio_ctrl_lock,
 					PTHREAD_PROCESS_SHARED);
 
@@ -166,17 +160,13 @@ ips_spio_init(const struct psmi_context *context, struct ptl *ptl,
 	ctrl->spio_blockcpy_selected = NULL;
 	ctrl->spio_blockcpy_routines[0] = hfi_pio_blockcpy_64;
 
-	ctrl->spio_blockcpy_routines[1] = NULL;
-#ifdef __SSE2__
 	ctrl->spio_blockcpy_routines[1] = hfi_pio_blockcpy_128;
-#endif
-	ctrl->spio_blockcpy_routines[2] = NULL;
-#ifdef __AVX2__
+
 	ctrl->spio_blockcpy_routines[2] = hfi_pio_blockcpy_256;
-#endif
-	ctrl->spio_blockcpy_routines[3] = NULL;
-#ifdef __AVX512F__
+#ifdef PSM_AVX512
 	ctrl->spio_blockcpy_routines[3] = hfi_pio_blockcpy_512;
+#else
+	ctrl->spio_blockcpy_routines[3] = NULL;
 #endif
 
 	get_cpuid(0x7, 0, &id);
@@ -219,8 +209,8 @@ ips_spio_init(const struct psmi_context *context, struct ptl *ptl,
 
 #ifdef PSM_CUDA
 	if (PSMI_IS_CUDA_ENABLED) {
-		PSMI_CUDA_CALL(cudaHostAlloc, (void **) &ctrl->cuda_pio_buffer,
-		       10240 /* Max MTU */, cudaHostAllocPortable);
+		PSMI_CUDA_CALL(cuMemHostAlloc, (void **) &ctrl->cuda_pio_buffer,
+				MAX_CUDA_MTU, CU_MEMHOSTALLOC_PORTABLE);
 	}
 #endif
 
@@ -229,11 +219,11 @@ ips_spio_init(const struct psmi_context *context, struct ptl *ptl,
 	return PSM2_OK;
 }
 
-psm2_error_t ips_spio_fini(struct ips_spio *ctrl)
+static PSMI_HAL_INLINE psm2_error_t ips_spio_fini(struct ips_spio *ctrl)
 {
 #ifdef PSM_CUDA
 	if (PSMI_IS_CUDA_ENABLED)
-		PSMI_CUDA_CALL(cudaFreeHost, (void *) ctrl->cuda_pio_buffer);
+		PSMI_CUDA_CALL(cuMemFreeHost, (void *) ctrl->cuda_pio_buffer);
 #endif
 	spio_report_stall(ctrl, get_cycles(), 0ULL);
 	if (!ctrl->context->spio_ctrl)
@@ -241,7 +231,7 @@ psm2_error_t ips_spio_fini(struct ips_spio *ctrl)
 	return PSM2_OK;
 }
 
-static
+static PSMI_HAL_INLINE
 void
 spio_report_stall(struct ips_spio *ctrl, uint64_t t_cyc_now,
 		  uint64_t send_failures)
@@ -307,7 +297,7 @@ spio_report_stall(struct ips_spio *ctrl, uint64_t t_cyc_now,
 	return;
 }
 
-static void spio_handle_stall(struct ips_spio *ctrl, uint64_t send_failures)
+static PSMI_HAL_INLINE void spio_handle_stall(struct ips_spio *ctrl, uint64_t send_failures)
 {
 	uint64_t t_cyc_now = get_cycles();
 
@@ -341,7 +331,7 @@ static void spio_handle_stall(struct ips_spio *ctrl, uint64_t send_failures)
  * 2. during events process when no event;
  * when a hfi is frozen, we recover hfi by calling this routine.
  */
-static void spio_reset_context(struct ips_spio *ctrl)
+static PSMI_HAL_INLINE void spio_reset_context(struct ips_spio *ctrl)
 {
 	/* if there are too many reset, teardown process */
 	ctrl->spio_ctrl->spio_reset_count++;
@@ -362,7 +352,7 @@ static void spio_reset_context(struct ips_spio *ctrl)
 	 * reset.
 	 */
 	ips_wmb();
-	if (hfi_reset_context(ctrl->context->ctrl))
+	if (psmi_hal_hfi_reset_context(ctrl->context->psm_hw_ctxt))
 		psmi_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
 			"Send context reset failed: %d.\n", errno);
 
@@ -386,10 +376,10 @@ static void spio_reset_context(struct ips_spio *ctrl)
  * psm calls to check events in the main receive loop
  * when there is no normal traffic.
  */
-static void spio_reset_hfi_internal(struct ips_spio *ctrl)
+static PSMI_HAL_INLINE void spio_reset_hfi_internal(struct ips_spio *ctrl)
 {
-	struct ips_recvhdrq *recvq = &ctrl->ptl->recvq;
-	struct ips_proto *proto = (struct ips_proto *)&ctrl->ptl->proto;
+	struct ips_recvhdrq *recvq = &((struct ptl_ips *)(ctrl->ptl))->recvq;
+	struct ips_proto *proto = (struct ips_proto *)&((struct ptl_ips *)(ctrl->ptl))->proto;
 
 	/* Reset receive queue state, this must be done first
 	 * because after send context reset, hardware start to
@@ -399,8 +389,11 @@ static void spio_reset_hfi_internal(struct ips_spio *ctrl)
 	recvq->state->rcv_egr_index_head = NO_EAGER_UPDATE;
 	recvq->state->num_hdrq_done = 0;
 	recvq->state->hdr_countdown = 0;
-	if (!(recvq->runtime_flags & HFI1_CAP_DMA_RTAIL))
-		recvq->state->hdrq_rhf_seq = 1;
+
+	/* set the expected sequence number to 1. */
+	if (!(get_psm_gen1_hi()->hfp_private.dma_rtail))
+		psmi_hal_set_rhf_expected_sequence_number(1, recvq->psm_hal_cl_hdrq,
+							  ((struct ptl_ips *)proto->ptl)->context->psm_hw_ctxt);
 
 	/* Reset send context */
 	spio_reset_context(ctrl);
@@ -415,13 +408,13 @@ static void spio_reset_hfi_internal(struct ips_spio *ctrl)
 		ips_proto_dma_completion_update(proto);
 }
 
-static psm2_error_t spio_reset_hfi(struct ips_spio *ctrl)
+static PSMI_HAL_INLINE psm2_error_t spio_reset_hfi(struct ips_spio *ctrl)
 {
 	/* Drain receive header queue before reset hfi, we use
 	 * the main progression loop to do this so we return from
 	 * here.
 	 */
-	if (!ips_recvhdrq_isempty(&ctrl->ptl->recvq))
+	if (!ips_recvhdrq_isempty(&((struct ptl_ips *)(ctrl->ptl))->recvq))
 		return PSM2_OK_NO_PROGRESS;
 
 	/* do the real reset work:
@@ -443,7 +436,7 @@ static psm2_error_t spio_reset_hfi(struct ips_spio *ctrl)
  * it just saves the shared count to local count and return. All the
  * operation are locked by spio_ctrl_lock.
  */
-static psm2_error_t spio_reset_hfi_shared(struct ips_spio *ctrl)
+static PSMI_HAL_INLINE psm2_error_t spio_reset_hfi_shared(struct ips_spio *ctrl)
 {
 	volatile struct ips_spio_ctrl *spio_ctrl = ctrl->spio_ctrl;
 
@@ -451,7 +444,7 @@ static psm2_error_t spio_reset_hfi_shared(struct ips_spio *ctrl)
 	 * the main progression loop to do this so we return from
 	 * here. We don't reset software receive header queue.
 	 */
-	if (!ips_recvhdrq_isempty(&ctrl->ptl->recvq))
+	if (!ips_recvhdrq_isempty(&((struct ptl_ips *)(ctrl->ptl))->recvq))
 		return PSM2_OK_NO_PROGRESS;
 
 	pthread_spin_lock(&spio_ctrl->spio_ctrl_lock);
@@ -487,7 +480,7 @@ static psm2_error_t spio_reset_hfi_shared(struct ips_spio *ctrl)
  * PSM2_OK: new credits updated;
  * PSM2_OK_NO_PROGRESS: no new credits;
  */
-static psm2_error_t
+static PSMI_HAL_INLINE psm2_error_t
 spio_credit_return_update(struct ips_spio *ctrl)
 {
 	uint64_t credit_return;
@@ -533,7 +526,7 @@ spio_credit_return_update(struct ips_spio *ctrl)
  * PSM2_OK: new credits updated;
  * PSM2_OK_NO_PROGRESS: no new credits;
  */
-static psm2_error_t
+static PSMI_HAL_INLINE psm2_error_t
 spio_credit_return_update_shared(struct ips_spio *ctrl)
 {
 	uint64_t credit_return;
@@ -600,24 +593,29 @@ spio_credit_return_update_shared(struct ips_spio *ctrl)
  *  PSM2_OK: normal events processing;
  *  PSM2_OK_NO_PROGRESS: no event is processed;
  */
-psm2_error_t
-ips_spio_process_events(const struct ptl *ptl)
+static PSMI_HAL_INLINE psm2_error_t
+ips_spio_process_events(const struct ptl *ptl_gen)
 {
+	struct ptl_ips *ptl = (struct ptl_ips *)ptl_gen;
 	struct ips_spio *ctrl = ptl->proto.spioc;
-	__u64 event_mask;
+	uint64_t event_mask;
+	int rc = psmi_hal_get_hfi_event_bits(&event_mask,ctrl->context->psm_hw_ctxt);
+
+	if (rc)
+		return PSM2_OK_NO_PROGRESS;
 
 	/*
 	 * If there is no event, try do credit return update
 	 * to catch send context halt.
 	 */
-	if_pf(*ctrl->spio_event == 0)
+	if_pf(event_mask == 0)
 		return ctrl->spio_credit_return_update(ctrl);
 
 	/*
 	 * Process mmu invalidation event, this will invalidate
 	 * all caching items removed by mmu notifier.
 	 */
-	if ((*ctrl->spio_event) & HFI1_EVENT_TID_MMU_NOTIFY) {
+	if (event_mask & PSM_HAL_HFI_EVENT_TID_MMU_NOTIFY) {
 		/*
 		 * driver will clear the event bit before return,
 		 * PSM does not need to ack the event.
@@ -625,11 +623,8 @@ ips_spio_process_events(const struct ptl *ptl)
 		return ips_tidcache_invalidation(&ptl->proto.protoexp->tidc);
 	}
 
-	/* Get event mask for PSM to process */
-	event_mask = (uint64_t) *ctrl->spio_event;
-
 	/* Check if HFI is frozen */
-	if (event_mask & HFI1_EVENT_FROZEN) {
+	if (event_mask & PSM_HAL_HFI_EVENT_FROZEN) {
 		/* if no progress, return and retry */
 		if (ctrl->spio_reset_hfi(ctrl) != PSM2_OK)
 			return PSM2_OK_NO_PROGRESS;
@@ -638,21 +633,22 @@ ips_spio_process_events(const struct ptl *ptl)
 	/* First ack the driver the receipt of the events */
 	_HFI_VDBG("Acking event(s) 0x%" PRIx64 " to qib driver.\n",
 		  (uint64_t) event_mask);
-	hfi_event_ack(ctrl->context->ctrl, event_mask);
 
-	if (event_mask & HFI1_EVENT_LINKDOWN) {
+	psmi_hal_ack_hfi_event(event_mask, ctrl->context->psm_hw_ctxt);
+
+	if (event_mask & PSM_HAL_HFI_EVENT_LINKDOWN) {
 		/* A link down event can clear the LMC and SL2VL
 		 * change as those events are implicitly handled
 		 * in the link up/down event handler.
 		 */
 		event_mask &=
-			    ~(HFI1_EVENT_LMC_CHANGE |
-				HFI1_EVENT_SL2VL_CHANGE);
-		ips_ibta_link_updown_event(&ctrl->ptl->proto);
+			    ~(PSM_HAL_HFI_EVENT_LMC_CHANGE |
+				PSM_HAL_HFI_EVENT_SL2VL_CHANGE);
+		ips_ibta_link_updown_event(&((struct ptl_ips *)(ctrl->ptl))->proto);
 		_HFI_VDBG("Link down detected.\n");
 	}
 
-	if (event_mask & HFI1_EVENT_LID_CHANGE) {
+	if (event_mask & PSM_HAL_HFI_EVENT_LID_CHANGE) {
 		/* Display a warning that LID change has occurred during
 		 * the run. This is not supported in the current
 		 * implementation and in general is bad for the SM to
@@ -662,22 +658,22 @@ ips_spio_process_events(const struct ptl *ptl)
 		    ("Warning! LID change detected during run. "
 			"Old LID: %d, New Lid: %d\n",
 		     (int)PSMI_EPID_GET_LID(ctrl->context->epid),
-		     (int)hfi_get_port_lid(ctrl->unit_id,
+		     (int)psmi_hal_get_port_lid(ctrl->unit_id,
 					   ctrl->portnum));
 	}
 
-	if (event_mask & HFI1_EVENT_LMC_CHANGE)
+	if (event_mask & PSM_HAL_HFI_EVENT_LMC_CHANGE)
 			_HFI_INFO("Fabric LMC changed.\n");
 
-	if (event_mask & HFI1_EVENT_SL2VL_CHANGE) {
+	if (event_mask & PSM_HAL_HFI_EVENT_SL2VL_CHANGE) {
 		_HFI_INFO("SL2VL mapping changed for port.\n");
-		ips_ibta_init_sl2sc2vl_table(&ctrl->ptl->proto);
+		ips_ibta_init_sl2sc2vl_table(&((struct ptl_ips *)(ctrl->ptl))->proto);
 	}
 
 	return PSM2_OK;
 }
 
-static void
+static PSMI_HAL_INLINE void
 spio_handle_resync(struct ips_spio *ctrl, uint64_t consecutive_send_failed)
 {
 	/* hfi_force_pio_avail_update(ctrl->context->ctrl); */
@@ -697,7 +693,7 @@ spio_handle_resync(struct ips_spio *ctrl, uint64_t consecutive_send_failed)
  * PSM2_EP_NO_NETWORK: No network, no lid, ...
  * PSM2_EP_DEVICE_FAILURE: Chip failures, rxe/txe parity, etc.
  */
-psm2_error_t
+static inline psm2_error_t
 ips_spio_transfer_frame(struct ips_proto *proto, struct ips_flow *flow,
 			struct hfi_pbc *pbc, uint32_t *payload,
 			uint32_t length, uint32_t isCtrlMsg,
@@ -712,7 +708,7 @@ ips_spio_transfer_frame(struct ips_proto *proto, struct ips_flow *flow,
 	volatile uint64_t *pioaddr;
 	uint32_t paylen, nblks;
 	psm2_error_t err = PSM2_OK;
-	int do_lock = (ctrl->runtime_flags & PSMI_RUNTIME_RCVTHREAD);
+	int do_lock = psmi_hal_has_status(PSM_HAL_PSMI_RUNTIME_RX_THREAD_STARTED);
 
 	if (do_lock)
 		pthread_spin_lock(&ctrl->spio_lock);
@@ -831,20 +827,20 @@ fi_busy:
 	if (++ctrl->spio_block_index == ctrl->spio_total_blocks)
 		ctrl->spio_block_index = 0;
 
-	ctrl->spio_blockcpy_selected(pioaddr, (uint64_t *) pbc, 1);
+	hfi_pio_blockcpy_64(pioaddr, (uint64_t *) pbc, 1);
 	_HFI_VDBG("pio qw write sop %p: 8\n", pioaddr);
 
 	/* Write to PIO: other blocks of payload */
 #ifdef PSM_CUDA
 	if (is_cuda_payload) {
-		/* Since the implementation of cudaMemcpy is unknown,
+		/* Since the implementation of cuMemcpy is unknown,
 		   and the HFI specifies several conditions for how PIO
 		   writes must occur, for safety reasons we should not assume
-		   that cudaMemcpy will follow the HFI's requirements.
-		   The cudaMemcpy should instead write into a buffer in
+		   that cuMemcpy will follow the HFI's requirements.
+		   The cuMemcpy should instead write into a buffer in
 		   host memory, and then PSM can copy to the HFI as usual. */
-		PSMI_CUDA_CALL(cudaMemcpy, ctrl->cuda_pio_buffer,
-			       payload, paylen, cudaMemcpyDeviceToHost);
+		PSMI_CUDA_CALL(cuMemcpyDtoH, ctrl->cuda_pio_buffer,
+			       (CUdeviceptr)payload, paylen);
 		payload = (uint32_t *) ctrl->cuda_pio_buffer;
 	}
 #endif
@@ -935,7 +931,6 @@ fi_busy:
 			_HFI_VDBG("pio qw write %p: %d\n", pioaddr, 8);
 		}
 	}
-
 	/*
 	 * In context sharing, we need to track who is in progress of
 	 * writing to PIO block, this is for halted send context reset.
@@ -947,5 +942,5 @@ fi_busy:
 		pthread_spin_unlock(&spio_ctrl->spio_ctrl_lock);
 	}
 
-	return PSM2_OK;
+	return err;
 }				/* ips_spio_transfer_frame() */
