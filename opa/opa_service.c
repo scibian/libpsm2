@@ -216,10 +216,10 @@ int hfi_context_open_ex(int unit, int port, uint64_t open_timeout,
 	int fd;
 
 	if (unit != HFI_UNIT_ID_ANY && unit >= 0)
-		snprintf(dev_name, dev_name_len, "%s_%u", HFI_DEVICE_PATH,
+		snprintf(dev_name, dev_name_len, "%s_%u", HFI_DEVICE_PATH_GEN1,
 			 unit);
 	else
-		snprintf(dev_name, dev_name_len, "%s_%u", HFI_DEVICE_PATH,
+		snprintf(dev_name, dev_name_len, "%s_%u", HFI_DEVICE_PATH_GEN1,
 			 0);
 
 	if (hfi_wait_for_device(dev_name, (long)open_timeout) == -1) {
@@ -273,6 +273,24 @@ int hfi_context_open_ex(int unit, int port, uint64_t open_timeout,
 
 #endif
 	return fd;
+}
+
+/*
+ * Check if non-double word multiple message size for SDMA is allowed to be
+ * pass to the driver. Starting from 6.2 driver version, PSM is able to pass
+ * to the driver message which size is not a multiple of double word for SDMA.
+ */
+uint32_t hfi_check_non_dw_mul_sdma(void)
+{
+	uint16_t major = hfi_get_user_major_version();
+	uint16_t minor = hfi_get_user_minor_version();
+
+	if ((major > HFI1_USER_SWMAJOR_NON_DW_MUL_MSG_SIZE_ALLOWED) ||
+		((major == HFI1_USER_SWMAJOR_NON_DW_MUL_MSG_SIZE_ALLOWED) &&
+		 (minor >= HFI1_USER_SWMINOR_NON_DW_MUL_MSG_SIZE_ALLOWED)))
+		return 1;
+
+	return 0;
 }
 
 void hfi_context_close(int fd)
@@ -378,7 +396,7 @@ void *hfi_mmap64(void *addr, size_t length, int prot, int flags, int fd,
 /* that a working chip has been found for each possible unit #. */
 /* number of units >=0 (0 means none found). */
 /* formerly used sysfs file "num_units" */
-int hfi_get_num_units(void)
+int hfi_get_num_units(int wait)
 {
 	int ret;
 
@@ -387,8 +405,8 @@ int hfi_get_num_units(void)
 		struct stat st;
 		int r;
 
-		snprintf(pathname, sizeof(pathname), HFI_DEVICE_PATH "_%d", ret);
-		if (ret == 0)
+		snprintf(pathname, sizeof(pathname), HFI_DEVICE_PATH_GEN1 "_%d", ret);
+		if (wait && (ret == 0))
 			/* We only wait for the first device to come up.  Not
 			   on subsequent devices in order to save time. */
 			r = hfi_wait_for_device(pathname, 0);
@@ -424,14 +442,14 @@ int hfi_get_unit_active(int unit)
 
 /* get the number of contexts from the unit id. */
 /* Returns 0 if no unit or no match. */
-int hfi_get_num_contexts(int unit_id)
+int hfi_get_num_contexts(int unit_id, int wait)
 {
 	int n = 0;
 	int units;
 	int64_t val;
 	uint32_t p = HFI_MIN_PORT;
 
-	units = hfi_get_num_units();
+	units = hfi_get_num_units(wait);
 
 	if_pf(units <=  0)
 		return 0;
@@ -809,26 +827,32 @@ int hfi_get_ctrs_port(int unitno, int port, uint64_t *c, int nelem)
 		return i / sizeof(*c);
 }
 
-int hfi_get_cc_settings_bin(int unit, int port, char *ccabuf)
+int hfi_get_cc_settings_bin(int unit, int port, char *ccabuf, size_t len_ccabuf)
 {
 	int fd;
-	size_t count;
-/*
- * Check qib driver CCA setting, and try to use it if available.
- * Fall to self CCA setting if errors.
- */
-	sprintf(ccabuf, HFI_CLASS_PATH "_%d/ports/%d/CCMgtA/cc_settings_bin",
-		unit, port);
-	fd = open(ccabuf, O_RDONLY);
-	if (fd < 0) {
-		return 0;
-	}
+
 	/*
 	 * 4 bytes for 'control map'
 	 * 2 bytes 'port control'
 	 * 32 (#SLs) * 6 bytes 'congestion setting' (per-SL)
 	 */
-	count = 4 + 2 + (32 * 6);
+	const size_t count = 4 + 2 + (32 * 6);
+
+	if (count > len_ccabuf)
+		return -2;
+/*
+ * Check qib driver CCA setting, and try to use it if available.
+ * Fall to self CCA setting if errors.
+ */
+	if (snprintf(ccabuf, len_ccabuf, "%s%d/ports/%d/CCMgtA/cc_settings_bin",
+		     hfi_sysfs_path(), unit, port) >= (len_ccabuf-1))
+		return -1;
+
+	fd = open(ccabuf, O_RDONLY);
+	if (fd < 0) {
+		return 0;
+	}
+
 	if (read(fd, ccabuf, count) != count) {
 		_HFI_CCADBG("Read cc_settings_bin failed. using static CCA\n");
 		close(fd);
@@ -847,10 +871,12 @@ int hfi_get_cc_table_bin(int unit, int port, uint16_t **cctp)
 	uint16_t *cct;
 	int fd;
 	char pathname[256];
-
 	*cctp = NULL;
-	sprintf(pathname, HFI_CLASS_PATH "_%d/ports/%d/CCMgtA/cc_table_bin",
-		unit, port);
+
+	if (snprintf(pathname,sizeof(pathname), "%s%d/ports/%d/CCMgtA/cc_table_bin",
+		     hfi_sysfs_path(), unit, port) >= (sizeof(pathname)-1))
+		return -1;
+
 	fd = open(pathname, O_RDONLY);
 	if (fd < 0) {
 		_HFI_CCADBG("Open cc_table_bin failed. using static CCA\n");

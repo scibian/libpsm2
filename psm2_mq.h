@@ -1090,6 +1090,45 @@ psm2_mq_ipeek(psm2_mq_t mq, psm2_mq_req_t *req, psm2_mq_status_t *status);
 psm2_error_t
 psm2_mq_ipeek2(psm2_mq_t mq, psm2_mq_req_t *req, psm2_mq_status2_t *status);
 
+/** @brief Check and dequeue the first request entry from the completed queue.
+ *
+ * Function to atomically check and dequeue the first entry from the completed
+ * queue. It must be paired with function psm2_mq_req_free, which returns the
+ * request to PSM2 library.
+ *
+ * @param[in] mq Matched Queue Handle
+ * @param[out] req PSM MQ Request handle, to be used for receiving the matched
+ *                  message.
+ *
+ * The following error codes are returned.
+ *
+ * @retval PSM2_OK The dequeue operation was successful and @c req is updated
+ *                 with a request ready for completion.
+ *
+ * @retval PSM2_MQ_NO_COMPLETIONS The dequeue operation was not successful,
+ *                            meaning that there are no further requests ready
+ *                            for completion. The contents of @c req remain
+ *                            unchanged.
+ */
+psm2_error_t
+psm2_mq_ipeek_dequeue(psm2_mq_t mq, psm2_mq_req_t *req);
+
+/** @brief Return the request to PSM2 library.
+ *
+ * Function returns the request previously obtained via psm2_mq_ipeek_dequeue
+ * to the PSM2 library.
+ *
+ * @param[in] mq Matched Queue Handle
+ * @param[in] req PSM MQ Request handle to be returned to PSM2 library.
+              If @p req is NULL, no operation is performed.
+ *
+ * The following error codes are returned.
+ *
+ * @retval PSM2_OK Return of an object to PSM2 library pool was successful.
+ */
+psm2_error_t
+psm2_mq_req_free(psm2_mq_t mq, psm2_mq_req_t req);
+
 /** @brief Wait until a non-blocking request completes
  *
  * Function to wait on requests created from either preposted receive buffers
