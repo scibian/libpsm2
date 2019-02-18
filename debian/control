@@ -1,5 +1,5 @@
 Source: libpsm2
-Maintainer: Brian T. Smith <bsmith@systemfabricworks.com>
+Maintainer: Scibian Project <packaging@scibian.org>
 Section: libs
 Priority: extra
 Standards-Version: 3.9.6
@@ -9,6 +9,8 @@ Build-Depends: debhelper (>= 9),
                quilt,
                systemd,
                ifs-kernel-updates-dev,
+Vcs-Git: https://github.com/scibian/ifs-kernel-updates.git
+Vcs-Browser: https://github.com/scibian/ifs-kernel-updates
 
 Package: libpsm2-2
 Architecture: amd64
