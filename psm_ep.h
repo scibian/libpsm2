@@ -116,13 +116,6 @@
 #define PSMI_EPID_GET_SUBNET_ID(epid)		(((epid)>>48)&0xffff)
 #define PSMI_EPID_GET_PROCESS_ID(epid)		(((epid)>>32)&0xffffffff)
 
-#define PSMI_MIN_EP_CONNECT_TIMEOUT (2 * SEC_ULL)
-#define PSMI_MIN_EP_CLOSE_TIMEOUT   (1 * SEC_ULL)
-#define PSMI_MAX_EP_CLOSE_TIMEOUT   (2 * SEC_ULL)
-
-#define PSMI_MIN_EP_CLOSE_GRACE_INTERVAL (1 * SEC_ULL)
-#define PSMI_MAX_EP_CLOSE_GRACE_INTERVAL (2 * SEC_ULL)
-
 #define PSM_MCTXT_APPEND(head, node)	\
 	node->mctxt_prev = head->mctxt_prev; \
 	node->mctxt_next = head; \
@@ -134,8 +127,6 @@
 	node->mctxt_next->mctxt_prev = node->mctxt_prev; \
 	node->mctxt_next = node->mctxt_prev = node; \
 	node->mctxt_master = NULL
-
-#define HFI_MAX_RAILS		4
 
 struct psm2_ep {
 	psm2_epid_t epid;	    /**> This endpoint's Endpoint ID */
@@ -173,7 +164,7 @@ struct psm2_ep {
 	struct psm2_ep *mctxt_master;
 
 	/* Active Message handler table */
-	void **am_htable;
+	struct psm2_ep_am_handle_entry *am_htable;
 
 	uint64_t gid_hi;
 	uint64_t gid_lo;

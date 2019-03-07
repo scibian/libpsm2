@@ -56,14 +56,12 @@
 #ifndef _IPS_PROTO_H
 #define _IPS_PROTO_H
 
+#include "ips_config.h"
 #include "psm_user.h"
 
-#include "ips_recvhdrq.h"
 #include "ips_tid.h"
-#include "ips_scb.h"
+#include "ips_recvhdrq.h"
 #include "ips_epstate.h"
-#include "ips_spio.h"
-#include "ips_stats.h"
 #include "ips_proto_am.h"
 #include "ips_tidflow.h"
 #include "ips_path_rec.h"
@@ -90,6 +88,7 @@ struct ips_epinfo {
 	uint16_t ep_hfi_type;
 	uint16_t ep_sl;		/* HFI_SL only when path record not used */
 	uint16_t ep_mtu;
+	uint16_t ep_mtu_code;
 	uint16_t ep_piosize;
 	uint16_t ep_pkey;	/* PSM2_PKEY only when path record not used */
 	uint16_t ep_jkey;
@@ -99,36 +98,45 @@ struct ips_epinfo {
 };
 
 /*
- * Remote Endpoint info.
+ * This contains a path record table table that Enumerate the paths available
+ * between the local node and a remote node associated with an end point.
+ * Also maintain a state value for each message priority that keeps indicates
+ * which path should be assigned to the next message of that priority.
  *
- * Contains information necessary for composing packets for a remote endpoint
+ * For LMC/Torus, keep list of base and max dlid. Used for pkt verification
+ *
+ * pg_base_dlid and pg_base_slid are in network byte order.
  */
 #define IPS_MAX_PATH_LMC 3
 typedef struct ips_path_grp {
-	/* For LMC/Torus keep list of base and max dlid. Used for pkt verification */
-	uint16_t pg_base_lid;
+	uint16_t pg_base_dlid;
+	uint16_t pg_base_slid;
 	uint8_t pg_num_paths[IPS_PATH_MAX_PRIORITY];
 	uint8_t pg_next_path[IPS_PATH_MAX_PRIORITY];
 	ips_path_rec_t *pg_path[0][IPS_PATH_MAX_PRIORITY];
 } ips_path_grp_t;
 
 /*
- * Control messages.
- *
- * ips low-level control messages to ensure reliability of eager packets.
- *
+ * Start and finish routines for constructing an ips_proto.
  */
 struct ips_proto;
-psm2_error_t ips_proto_init(const psmi_context_t *context, const struct ptl *ptl, int num_of_send_bufs, int num_of_send_desc, uint32_t imm_size, const struct psmi_timer_ctrl *timerq,	/* PTL's timerq */
-			   const struct ips_epstate *epstate,	/* PTL's epstate */
-			   const struct ips_spio *spioc,	/* PTL's spio control */
-			   struct ips_proto *proto);	/* output protocol */
+psm2_error_t ips_proto_init(const psmi_context_t *context,
+			    const struct ptl *ptl,
+			    int num_of_send_bufs,
+			    int num_of_send_desc,
+			    uint32_t imm_size,
+			    const struct psmi_timer_ctrl *timerq, /* PTL's timerq */
+			    const struct ips_epstate *epstate,	  /* PTL's epstate */
+			    void *spioc,	                  /* PTL's opaque spio control */
+			    struct ips_proto *proto);	          /* output protocol */
 
 psm2_error_t ips_proto_fini(struct ips_proto *proto, int force,
 			   uint64_t timeout);
 
 /*
  * Control message structures
+ *
+ * ips low-level control messages to ensure reliability of eager packets.
  */
 #define CTRL_MSG_QEUEUE_SIZE 64	/* power of two */
 
@@ -292,8 +300,6 @@ struct ips_proto {
 	struct ptl *ptl;	/* cached */
 	psm2_ep_t ep;		/* cached, for errors */
 	psm2_mq_t mq;		/* cached, for mq handling */
-	int fd;			/* cached, for writev ops */
-
 	/* Pending sends */
 	struct ips_pend_sends pend_sends;
 	struct ips_epstate *epstate;
@@ -306,7 +312,6 @@ struct ips_proto {
 	struct ips_epinfo epinfo;
 
 	ips_scb_t **sdma_scb_queue;
-	struct hfi1_sdma_comp_entry *sdma_comp_queue;
 	uint16_t sdma_queue_size;
 	uint16_t sdma_fill_index;
 	uint16_t sdma_done_index;
@@ -388,6 +393,13 @@ struct ips_proto {
 
 	/* Path record support */
 	uint8_t ips_ipd_delay[IBV_RATE_300_GBPS + 1];
+	/*
+	 * Disable the LMC based dispersive routing for all message
+	 * sizes in bytes between ips_lmc_disable_low and ips_lmc_disable_high,
+	 * inclusive.
+	 */
+	uint32_t ips_lmc_disable_low;
+	uint32_t ips_lmc_disable_high;
 	struct hsearch_data ips_path_rec_hash;
 	struct hsearch_data ips_path_grp_hash;
 	void *opp_lib;
@@ -401,10 +413,10 @@ struct ips_proto {
 	struct ips_cuda_hostbuf_mpool_cb_context cuda_hostbuf_small_send_cfg;
 	mpool_t cuda_hostbuf_pool_send;
 	mpool_t cuda_hostbuf_pool_small_send;
-	cudaStream_t cudastream_send;
+	CUstream cudastream_send;
 	unsigned cuda_prefetch_limit;
 #endif
-	int ips_extra_sdmahdr_size;
+
 /*
  * Control message queue for pending messages.
  *
@@ -421,6 +433,35 @@ struct ips_proto {
 
 	time_t writevFailTime;
 };
+
+static inline int
+ips_proto_is_disabled_pio(struct ips_proto *proto)
+{
+	return !!(proto->flags & IPS_PROTO_FLAG_SDMA);
+}
+
+static inline int
+ips_proto_is_disabled_sdma(struct ips_proto *proto)
+{
+	return !!(proto->flags & IPS_PROTO_FLAG_SPIO);
+}
+
+/*
+ * Test the payload length against the lmc_disable_low and lmc_disable_hi
+ * values, to determine if a transfer of this size should use LMC LIDs.
+ * Set the IPS_SEND_FLAG_NO_LMC flag in the scb.
+ */
+static inline void
+ips_set_LMC_LID_choice(struct ips_proto *proto, ips_scb_t *scb, uint32_t len)
+{
+	if ((len >= proto->ips_lmc_disable_low) &&
+	    (len <= proto->ips_lmc_disable_high)) {
+		PSM2_LOG_MSG("DISABLE LMC paylen %u\n", len);
+		scb->scb_flags |= IPS_SEND_FLAG_NO_LMC;
+	}
+
+	return;
+}
 
 /*
  * Endpoint address, encapsulates per-endpoint protocol metadata
@@ -633,13 +674,12 @@ psm2_error_t ips_proto_mq_send(psm2_mq_t mq, psm2_epaddr_t epaddr,
 			      const void *ubuf, uint32_t len);
 
 psm2_error_t ips_proto_mq_isend(psm2_mq_t mq, psm2_epaddr_t epaddr,
-			       uint32_t flags, psm2_mq_tag_t *tag,
-			       const void *ubuf, uint32_t len, void *context,
-			       psm2_mq_req_t *req_o);
+				uint32_t flags_user, uint32_t flags_internal,
+				psm2_mq_tag_t *tag, const void *ubuf, uint32_t len,
+				void *context, psm2_mq_req_t *req_o);
 
-#define IPS_NON_DW_MUL_NOT_ALLOWED	0
-#define IPS_NON_DW_MUL_ALLOWED		1
-void ips_proto_mq_set_non_dw_mul_sdma(uint32_t mode);
+psm2_error_t ips_proto_msg_size_thresh_query (enum psm2_info_query_thresh_et,
+					      uint32_t *out, psm2_mq_t mq, psm2_epaddr_t);
 
 int ips_proto_am(struct ips_recvhdrq_event *rcv_ev);
 
@@ -661,14 +701,20 @@ MOCK_DCL_EPILOGUE(ips_ibta_init);
 psm2_error_t ips_ibta_fini(struct ips_proto *proto);
 
 PSMI_ALWAYS_INLINE(
-void* psmi_get_sdma_req_info(struct ips_scb *scb, int sdmahdr_extra_bytes))
+struct psm_hal_sdma_req_info *
+psmi_get_sdma_req_info(struct ips_scb *scb, size_t *extra))
 {
+	*extra = 0;
 #ifdef PSM_CUDA
-	if (PSMI_IS_DRIVER_GPUDIRECT_ENABLED)
-		return (void *)(((char*)&scb->pbc) - sizeof(struct sdma_req_info_v6_3) -
-				  sdmahdr_extra_bytes);
+	if (!PSMI_IS_DRIVER_GPUDIRECT_ENABLED)
+		return (void *)(((char *)&scb->pbc) -
+				(sizeof(struct psm_hal_sdma_req_info) -
+				 PSM_HAL_CUDA_SDMA_REQ_INFO_EXTRA));
+
+	*extra = PSM_HAL_CUDA_SDMA_REQ_INFO_EXTRA;
 #endif
-	return (void *)(((char*)&scb->pbc) - sizeof(struct sdma_req_info_v6_3));
+
+	return (void *)(((char *)&scb->pbc) - (sizeof(struct psm_hal_sdma_req_info)));
 }
 
 #ifdef PSM_CUDA

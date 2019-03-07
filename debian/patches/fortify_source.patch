@@ -1,12 +1,12 @@
 Description: Add _FORTIFY_SOURCE flags
  Specify _FORTIFY_SOURCE for both debug and normal builds.
 Author: Brian T. Smith <bsmith@systemfabricworks.com>
-Last-Update: 2018-07-20
+Last-Update: 2019-01-30
 ---
 This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
 --- a/buildflags.mak
 +++ b/buildflags.mak
-@@ -149,7 +149,7 @@
+@@ -163,7 +163,7 @@
  ifneq (,${PSM_DEBUG})
    BASECFLAGS += -O -g3 -DPSM_DEBUG -D_HFI_DEBUGGING -funit-at-a-time -Wp,-D_FORTIFY_SOURCE=2
  else

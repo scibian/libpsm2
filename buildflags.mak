@@ -94,7 +94,7 @@ LINKER_SCRIPT := -Wl,--version-script $(LINKER_SCRIPT_FILE)
 endif
 
 WERROR := -Werror
-INCLUDES := -I. -I$(top_srcdir)/include -I$(top_srcdir)/mpspawn -I$(top_srcdir)/include/$(os)-$(arch)
+INCLUDES := -I$(top_srcdir)/include -I$(top_srcdir)/mpspawn -I$(top_srcdir)/include/$(os)-$(arch)
 
 #
 # use IFS provided hfi1_user.h if installed.
@@ -105,36 +105,50 @@ INCLUDES += -I${IFS_HFI_HEADER_PATH}
 BASECFLAGS +=-Wall $(WERROR)
 
 #
-# test if compiler supports SSE4.2 (needed for crc32 instruction)
-#
-RET := $(shell echo "int main() {}" | ${CC} -msse4.2 -E -dM -xc - 2>&1 | grep -q SSE4_2 ; echo $$?)
-ifeq (0,${RET})
-  BASECFLAGS += -msse4.2
-else
-  $(error SSE4.2 compiler support required )
-endif
-
-#
 # test if compiler supports 32B(AVX2)/64B(AVX512F) move instruction.
 #
-ifneq (,${PSM_AVX})
-  ifeq (${CC},icc)
-    MAVX2=-march=core-avx2
+ifeq (${CC},icc)
+  ifeq ($(PSM_DISABLE_AVX2),)
+    MAVX2=-xATOM_SSE4.2 -DPSM_AVX512
   else
-    MAVX2=-mavx2
+    MAVX2=-march=core-avx-i
   endif
-  RET := $(shell echo "int main() {}" | ${CC} ${MAVX2} -E -dM -xc - 2>&1 | grep -q AVX2 ; echo $$?)
-  ifeq (0,${RET})
-    TMPVAR := $(BASECFLAGS)
-    BASECFLAGS := $(filter-out -msse4.2,$(TMPVAR))
-    BASECFLAGS += ${MAVX2}
+else
+  ifeq ($(PSM_DISABLE_AVX2),)
+    MAVX2=-mavx2
+  else
+    MAVX2=-mavx
+  endif
+endif
+
+ifneq (icc,${CC})
+  ifeq ($(PSM_DISABLE_AVX2),)
+    RET := $(shell echo "int main() {}" | ${CC} ${MAVX2} -E -dM -xc - 2>&1 | grep -q AVX2 ; echo $$?)
+  else
+    RET := $(shell echo "int main() {}" | ${CC} ${MAVX2} -E -dM -xc - 2>&1 | grep -q AVX ; echo $$?)
+    $(warning ***NOTE TO USER**** Disabling AVX2 will harm performance)
   endif
 
+  ifeq (0,${RET})
+      BASECFLAGS += ${MAVX2}
+  else
+      $(error Compiler does not support ${MAVX2} )
+  endif
+else
+    BASECFLAGS += ${MAVX2}
+endif
+
+# This support is dynamic at runtime, so is OK to enable as long as compiler can generate
+# the code.
+ifneq (,${PSM_AVX512})
   ifneq (icc,${CC})
     RET := $(shell echo "int main() {}" | ${CC} -mavx512f -E -dM -xc - 2>&1 | grep -q AVX512 ; echo $$?)
     ifeq (0,${RET})
       BASECFLAGS += -mavx512f
+    else
+        $(error Compiler does not support AVX512 )
     endif
+    BASECFLAGS += -DPSM_AVX512
   endif
 endif
 
@@ -156,9 +170,9 @@ ifneq (,${PSM_COVERAGE}) # This check must come after PSM_DEBUG to override opti
   LDFLAGS += -fprofile-arcs
 endif
 ifneq (,${PSM_LOG})
-   BASECFLAGS += -DPSM2_LOG
+   BASECFLAGS += -DPSM_LOG
 ifneq (,${PSM_LOG_FAST_IO})
-   BASECFLAGS += -DPSM2_LOG_FAST_IO
+   BASECFLAGS += -DPSM_LOG_FAST_IO
    PSM2_ADDITIONAL_GLOBALS += psmi_log_fini;psmi_log_message;
 endif
 endif
@@ -167,6 +181,7 @@ ifneq (,${PSM_PERF})
 endif
 ifneq (,${PSM_HEAP_DEBUG})
    BASECFLAGS += -DPSM_HEAP_DEBUG
+   PSM2_ADDITIONAL_GLOBALS += _psmi_heapdebug_val_heapallocs;
 endif
 ifneq (,${PSM_PROFILE})
   BASECFLAGS += -DPSM_PROFILE
@@ -178,12 +193,6 @@ ifneq (,${PSM_CUDA})
 endif
 
 BASECFLAGS += -fpic -fPIC -D_GNU_SOURCE
-
-ifneq (,${PSM_VALGRIND})
-  BASECFLAGS += -DPSM_VALGRIND
-else
-  BASECFLAGS += -DNVALGRIND
-endif
 
 ASFLAGS += -g3 -fpic
 

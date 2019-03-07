@@ -2,13 +2,13 @@ Source: libpsm2
 Maintainer: Brian T. Smith <bsmith@systemfabricworks.com>
 Section: libs
 Priority: extra
-Standards-Version: 3.9.8
+Standards-Version: 3.9.6
 Homepage: http://www.intel.com
-Build-Depends: debhelper (>= 10),
+Build-Depends: debhelper (>= 9),
                libnuma-dev,
-               dh-autoreconf,
                quilt,
                systemd,
+               ifs-kernel-updates-dev,
 
 Package: libpsm2-2
 Architecture: amd64
@@ -40,6 +40,21 @@ Description: Compat library for Intel PSM2
  Support for MPIs linked with PSM versions < 2. This will allow
  software compiled to use Intel(R) Truescale PSM, libinfinipath, to run
  with Intel(R) OPA PSM2, libpsm2.
+
+Package: libpsm2-2-dbg
+Architecture: amd64
+Section: debug
+Depends: libpsm2-2 (=${binary:Version}),
+         ${misc:Depends},
+Conflicts: libpsm2-dbg,
+Replaces: libpsm2-dbg,
+Description: Debugging symbols for Intel PSM2
+ PSM2 Messaging API, or PSM2 API, is the low-level
+ user-level communications interface for the Intel(R) OPA
+ family of products. PSM2 users are enabled with mechanisms
+ necessary to implement higher level communications
+ interfaces in parallel environments. This package contains the
+ debugging symbols for Intel PSM2 library.
 
 Package: libpsm2-dev
 Architecture: amd64

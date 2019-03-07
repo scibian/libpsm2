@@ -10,11 +10,7 @@ fi
 
 # trigger hfi1 devices to remove /dev/ipath symlink
 if [ -L /dev/ipath ] ; then
-	for DEV in /dev/hfi1_[0-9]; do
-		if [ -c $DEV ] ; then
-			udevadm trigger $DEV || true
-		fi
-	done
+	udevadm trigger -y hfi1_\* || true
 fi
 
 #DEBHELPER#

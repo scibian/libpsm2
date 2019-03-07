@@ -61,7 +61,7 @@
 #include "psm_mq_internal.h"
 #include "psm_am_internal.h"
 
-struct ptl {
+struct ptl_self {
 	psm2_ep_t ep;
 	psm2_epid_t epid;
 	psm2_epaddr_t epaddr;
@@ -74,14 +74,9 @@ ptl_handle_rtsmatch(psm2_mq_req_t recv_req, int was_posted)
 {
 	psm2_mq_req_t send_req = (psm2_mq_req_t) recv_req->ptl_req_ptr;
 
-	if (recv_req->recv_msglen > 0) {
-		PSM_VALGRIND_DEFINE_MQ_RECV(recv_req->buf, recv_req->buf_len,
-					    recv_req->recv_msglen);
-		VALGRIND_MAKE_MEM_DEFINED(send_req->buf, send_req->buf_len);
-		VALGRIND_MAKE_MEM_DEFINED(send_req->buf, recv_req->recv_msglen);
-
-		psmi_mq_mtucpy(recv_req->buf, send_req->buf,
-			       recv_req->recv_msglen);
+	if (recv_req->req_data.recv_msglen > 0) {
+		psmi_mq_mtucpy(recv_req->req_data.buf, send_req->req_data.buf,
+			       recv_req->req_data.recv_msglen);
 	}
 
 	psmi_mq_handle_rts_complete(recv_req);
@@ -90,8 +85,8 @@ ptl_handle_rtsmatch(psm2_mq_req_t recv_req, int was_posted)
 	 * buffered. */
 	if (send_req->state == MQ_STATE_COMPLETE) {
 		psmi_mq_stats_rts_account(send_req);
-		if (send_req->buf != NULL && send_req->send_msglen > 0)
-			psmi_mq_sysbuf_free(send_req->mq, send_req->buf);
+		if (send_req->req_data.buf != NULL && send_req->req_data.send_msglen > 0)
+			psmi_mq_sysbuf_free(send_req->mq, send_req->req_data.buf);
 		/* req was left "live" even though the sender was told that the
 		 * send was done */
 		psmi_mq_req_free(send_req);
@@ -99,7 +94,7 @@ ptl_handle_rtsmatch(psm2_mq_req_t recv_req, int was_posted)
 		psmi_mq_handle_rts_complete(send_req);
 
 	_HFI_VDBG("[self][complete][b=%p][sreq=%p][rreq=%p]\n",
-		  recv_req->buf, send_req, recv_req);
+		  recv_req->req_data.buf, send_req, recv_req);
 	return PSM2_OK;
 }
 
@@ -117,12 +112,12 @@ psm2_error_t self_mq_send_testwait(psm2_mq_req_t *ireq)
 	 */
 	req->testwait_callback = NULL;	/* no more calls here */
 
-	ubuf = req->buf;
-	if (ubuf != NULL && req->send_msglen > 0) {
-		req->buf = psmi_mq_sysbuf_alloc(req->mq, req->send_msglen);
-		if (req->buf == NULL)
+	ubuf = req->req_data.buf;
+	if (ubuf != NULL && req->req_data.send_msglen > 0) {
+		req->req_data.buf = psmi_mq_sysbuf_alloc(req->mq, req->req_data.send_msglen);
+		if (req->req_data.buf == NULL)
 			return PSM2_NO_MEMORY;
-		psmi_mq_mtucpy(req->buf, ubuf, req->send_msglen);
+		psmi_mq_mtucpy(req->req_data.buf, ubuf, req->req_data.send_msglen);
 	}
 
 	/* Mark it complete but don't free the req, it's freed when the receiver
@@ -135,9 +130,9 @@ psm2_error_t self_mq_send_testwait(psm2_mq_req_t *ireq)
 /* Self is different.  We do everything as rendezvous. */
 static
 psm2_error_t
-self_mq_isend(psm2_mq_t mq, psm2_epaddr_t epaddr, uint32_t flags,
-	      psm2_mq_tag_t *tag, const void *ubuf, uint32_t len, void *context,
-	      psm2_mq_req_t *req_o)
+self_mq_isend(psm2_mq_t mq, psm2_epaddr_t epaddr, uint32_t flags_user,
+	      uint32_t flags_internal, psm2_mq_tag_t *tag, const void *ubuf,
+	      uint32_t len, void *context, psm2_mq_req_t *req_o)
 {
 	psm2_mq_req_t send_req;
 	psm2_mq_req_t recv_req;
@@ -167,10 +162,10 @@ self_mq_isend(psm2_mq_t mq, psm2_epaddr_t epaddr, uint32_t flags,
 	rc = psmi_mq_handle_rts(mq, epaddr, tag,
 				len, NULL, 0, 1,
 				ptl_handle_rtsmatch, &recv_req);
-	send_req->tag = *tag;
-	send_req->buf = (void *)ubuf;
-	send_req->send_msglen = len;
-	send_req->context = context;
+	send_req->req_data.tag = *tag;
+	send_req->req_data.buf = (void *)ubuf;
+	send_req->req_data.send_msglen = len;
+	send_req->req_data.context = context;
 	recv_req->ptl_req_ptr = (void *)send_req;
 	recv_req->rts_sbuf = (uintptr_t) ubuf;
 	recv_req->rts_peer = epaddr;
@@ -193,7 +188,7 @@ self_mq_send(psm2_mq_t mq, psm2_epaddr_t epaddr, uint32_t flags,
 {
 	psm2_error_t err;
 	psm2_mq_req_t req;
-	err = self_mq_isend(mq, epaddr, flags, tag, ubuf, len, NULL, &req);
+	err = self_mq_isend(mq, epaddr, flags, PSMI_REQ_FLAG_NORMAL, tag, ubuf, len, NULL, &req);
 	psmi_mq_wait_internal(&req);
 	return err;
 }
@@ -223,14 +218,27 @@ self_am_short_request(psm2_epaddr_t epaddr,
 		      psm2_am_completion_fn_t completion_fn,
 		      void *completion_ctxt)
 {
-	psm2_am_handler_fn_t hfn;
-	psm2_ep_t ep = epaddr->ptlctl->ptl->ep;
+	struct psm2_ep_am_handle_entry *hentry;
+	psm2_ep_t ep = ((struct ptl_self *)(epaddr->ptlctl->ptl))->ep;
 	struct psmi_am_token tok;
 
 	tok.epaddr_incoming = epaddr;
 
-	hfn = psm_am_get_handler_function(ep, handler);
-	hfn(&tok, args, nargs, src, len);
+	hentry = psm_am_get_handler_function(ep, handler);
+
+	/* Note a guard here for hentry != NULL is not needed because at
+	 * initialization, a psmi_assert_always() assure the entry will be
+	 * non-NULL. */
+
+	if (likely(hentry->version == PSM2_AM_HANDLER_V2)) {
+		psm2_am_handler_2_fn_t hfn2 =
+				(psm2_am_handler_2_fn_t)hentry->hfn;
+		hfn2(&tok, args, nargs, src, len, hentry->hctx);
+	} else {
+		psm2_am_handler_fn_t hfn1 =
+				(psm2_am_handler_fn_t)hentry->hfn;
+		hfn1(&tok, args, nargs, src, len);
+	}
 
 	if (completion_fn) {
 		completion_fn(completion_ctxt);
@@ -246,12 +254,26 @@ self_am_short_reply(psm2_am_token_t token,
 		    void *src, size_t len, int flags,
 		    psm2_am_completion_fn_t completion_fn, void *completion_ctxt)
 {
-	psm2_am_handler_fn_t hfn;
+	struct psm2_ep_am_handle_entry *hentry;
 	struct psmi_am_token *tok = token;
-	psm2_ep_t ep = tok->epaddr_incoming->ptlctl->ptl->ep;
+	struct ptl_self *ptl = (struct ptl_self *)tok->epaddr_incoming->ptlctl->ptl;
+	psm2_ep_t ep = ptl->ep;
 
-	hfn = psm_am_get_handler_function(ep, handler);
-	hfn(token, args, nargs, src, len);
+	hentry = psm_am_get_handler_function(ep, handler);
+
+	/* Note a guard here for hentry != NULL is not needed because at
+	 * initialization, a psmi_assert_always() assure the entry will be
+	 * non-NULL. */
+
+	if (likely(hentry->version == PSM2_AM_HANDLER_V2)) {
+		psm2_am_handler_2_fn_t hfn2 =
+				(psm2_am_handler_2_fn_t)hentry->hfn;
+		hfn2(token, args, nargs, src, len, hentry->hctx);
+	} else {
+		psm2_am_handler_fn_t hfn1 =
+				(psm2_am_handler_fn_t)hentry->hfn;
+		hfn1(token, args, nargs, src, len);
+	}
 
 	if (completion_fn) {
 		completion_fn(completion_ctxt);
@@ -262,13 +284,14 @@ self_am_short_reply(psm2_am_token_t token,
 
 static
 psm2_error_t
-self_connect(ptl_t *ptl,
+self_connect(ptl_t *ptl_gen,
 	     int numep,
 	     const psm2_epid_t array_of_epid[],
 	     const int array_of_epid_mask[],
 	     psm2_error_t array_of_errors[],
 	     psm2_epaddr_t array_of_epaddr[], uint64_t timeout_ns)
 {
+	struct ptl_self *ptl = (struct ptl_self *)ptl_gen;
 	psmi_assert_always(ptl->epaddr != NULL);
 	psm2_error_t err = PSM2_OK;
 	int i;
@@ -302,11 +325,12 @@ fail:
 
 static
 psm2_error_t
-self_disconnect(ptl_t *ptl, int force, int numep,
+self_disconnect(ptl_t *ptl_gen, int force, int numep,
 		   psm2_epaddr_t array_of_epaddr[],
 		   const int array_of_epaddr_mask[],
 		   psm2_error_t array_of_errors[], uint64_t timeout_in)
 {
+	struct ptl_self *ptl = (struct ptl_self *)ptl_gen;
 	int i;
 	for (i = 0; i < numep; i++) {
 		if (array_of_epaddr_mask[i] == 0)
@@ -323,12 +347,13 @@ self_disconnect(ptl_t *ptl, int force, int numep,
 static
 size_t self_ptl_sizeof(void)
 {
-	return sizeof(ptl_t);
+	return sizeof(struct ptl_self);
 }
 
 ustatic
-psm2_error_t self_ptl_init(const psm2_ep_t ep, ptl_t *ptl, ptl_ctl_t *ctl)
+psm2_error_t self_ptl_init(const psm2_ep_t ep, ptl_t *ptl_gen, ptl_ctl_t *ctl)
 {
+	struct ptl_self *ptl = (struct ptl_self *)ptl_gen;
 	psmi_assert_always(ep != NULL);
 	psmi_assert_always(ep->epaddr != NULL);
 	psmi_assert_always(ep->epid != 0);
@@ -340,7 +365,7 @@ psm2_error_t self_ptl_init(const psm2_ep_t ep, ptl_t *ptl, ptl_ctl_t *ctl)
 
 	memset(ctl, 0, sizeof(*ctl));
 	/* Fill in the control structure */
-	ctl->ptl = ptl;
+	ctl->ptl = ptl_gen;
 	ctl->ep = ep;
 	ctl->ep_poll = NULL;
 	ctl->ep_connect = self_connect;

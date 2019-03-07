@@ -14,7 +14,7 @@ MAINT_SCRIPTS=debian/libpsm2-2-compat.postinst \
 	debian/libpsm2-2-compat.postrm
 
 %:
-	dh $@ --parallel --with autoreconf
+	dh $@ --parallel
 
 debian/%.postinst: debian/%.postinst.in
 	sed -e 's/@DEB_HOST_MULTIARCH@/$(DEB_HOST_MULTIARCH)/g' 	\
@@ -37,6 +37,10 @@ debian/%.postrm: debian/%.postrm.in
 .PHONY: override_dh_auto_build
 override_dh_auto_build: $(MAINT_SCRIPTS)
 	dh_auto_build
+
+.PHONY: override_dh_strip
+override_dh_strip:
+	dh_strip --dbg-package=libpsm2-2-dbg
 
 .PHONY: override_dh_installdocs
 override_dh_installdocs:

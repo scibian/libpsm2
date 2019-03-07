@@ -50,13 +50,24 @@
 #
 
 
-OPTIONS =
 HISTORY = .outdirs
 HISTORIC_TARGETS = $(patsubst %, %_clean, $(shell cat $(HISTORY) 2> /dev/null))
 
 RPM_NAME := libpsm2
+CONFIG_FILE := .config
+TEMP_INST_DIR := $(shell mktemp -d)
 
-SUBDIRS:= ptl_self ptl_ips ptl_am libuuid opa
+ifeq ($(CONFIG_FILE), $(wildcard $(CONFIG_FILE)))
+include $(CONFIG_FILE)
+endif
+
+PSM_HAL_ENABLE ?= *
+
+PSM_HAL_ENABLE_D = $(wildcard $(addprefix psm_hal_,$(PSM_HAL_ENABLE)))
+
+PSM_HAL_INSTANCE_OBJFILES = $(addsuffix /*.o,$(PSM_HAL_ENABLE_D))
+
+SUBDIRS = ptl_self ptl_ips ptl_am libuuid opa ${wildcard $(PSM_HAL_ENABLE_D)}
 top_srcdir := $(shell readlink -m .)
 
 # Default locations
@@ -84,7 +95,6 @@ override OUTDIR := $(shell readlink -m $(OUTDIR))
 endif
 endif
 
-
 PSM2_VERNO_MAJOR := $(shell sed -n 's/^\#define.*PSM2_VERNO_MAJOR.*0x0\?\([1-9a-f]\?[0-9a-f]\+\).*/\1/p' $(top_srcdir)/psm2.h)
 PSM2_VERNO_MINOR := $(shell sed -n 's/^\#define.*PSM2_VERNO_MINOR.*0x\([0-9]\?[0-9a-f]\+\).*/\1/p' $(top_srcdir)/psm2.h)
 PSM2_LIB_MAJOR   := $(shell printf "%d" ${PSM2_VERNO_MAJOR})
@@ -107,6 +117,7 @@ export FCARCH ?= gfortran
 export AR ?= ar
 
 include $(top_srcdir)/buildflags.mak
+
 # We need to unexport these environs as during mock testing and normal calls,
 # if they are exported then during each submake they will be evaulated again.
 # This is costly and the LINKER_SCRIPT_FILE doesn't exist until after its
@@ -114,7 +125,7 @@ include $(top_srcdir)/buildflags.mak
 unexport SOURCES_CHKSUM_FILES
 unexport SOURCES_CHKSUM_VALUE
 unexport LINKER_SCRIPT_FILE
-INCLUDES += -I$(top_srcdir)
+INCLUDES += -I$(top_srcdir) -I$(top_srcdir)/ptl_ips -I$(OUTDIR)
 
 ifneq (x86_64,$(arch))
    ifneq (i386,$(arch))
@@ -136,7 +147,7 @@ export INSTALL_LIB_TARG
 
 TARGLIB := libpsm2
 COMPATMAJOR := $(shell sed -n 's/^\#define.*PSM2_VERNO_COMPAT_MAJOR.*0x0\?\([1-9a-f]\?[0-9a-f]\+\).*/\1/p' \
-             	 $(top_srcdir)/psm2.h)
+			 $(top_srcdir)/psm2.h)
 COMPATLIB := libpsm_infinipath
 
 MAJOR := $(PSM2_LIB_MAJOR)
@@ -267,15 +278,22 @@ OSSUBVERSION := $(shell grep VERSION_ID /etc/os-release | cut -f 2 -d\" | cut -f
 
 override RPM_NAME_BASEEXT := $(shell \
     if [ "$(OS)" = "SLES" ]; then \
-       if [ "$(OSVERSION)" \> "11" ]; then \
-          if [ "$(OSSUBVERSION)" \> "2" ]; then \
+       if [ $(OSVERSION) -gt 11 ]; then \
+          if [ $(OSVERSION) -eq 12 ]; then \
+             if [ $(OSSUBVERSION) -gt 2 ]; then \
+                echo "-2"; \
+             fi \
+          else \
              echo "-2"; \
           fi \
        fi \
     fi)
 endif
 
-all: outdir symlinks
+HALDECLFILE=$(OUTDIR)/psm2_hal_inlines_d.h
+HALIMPLFILE=$(OUTDIR)/psm2_hal_inlines_i.h
+
+all: symlinks $(HALDECLFILE) $(HALIMPLFILE) | $(OUTDIR)
 	@if [ ! -e $(HISTORY) ] || [ -z "`grep -E '^$(OUTDIR)$$' $(HISTORY)`" ]; then \
 		echo $(OUTDIR) >> $(HISTORY); \
 	fi
@@ -283,11 +301,37 @@ all: outdir symlinks
 	@for subdir in $(SUBDIRS); do \
 		mkdir -p $(OUTDIR)/$$subdir; \
 		$(MAKE) -j $(nthreads) -C $$subdir OUTDIR=$(OUTDIR)/$$subdir; \
+		if [ $$? -ne 0 ]; then exit 1; fi ;\
 	done
 	$(MAKE) -j $(nthreads) $(OUTDIR)/${TARGLIB}.so
 	$(MAKE) -j $(nthreads) $(OUTDIR)/${TARGLIB}.a
 	@mkdir -p $(OUTDIR)/compat
 	$(MAKE) -j $(nthreads) -C compat OUTDIR=$(OUTDIR)/compat
+
+$(HALDECLFILE): | $(OUTDIR)
+	@test -f $(HALDECLFILE) || ( \
+		n_hal_insts=$(words $(wildcard $(PSM_HAL_ENABLE_D)));\
+		echo "#define PSMI_HAL_INST_CNT $$n_hal_insts"                > $(HALDECLFILE);\
+		if [ $$n_hal_insts -eq 1 ]; then					       \
+		    echo "#define PSMI_HAL_INLINE inline"                    >> $(HALDECLFILE);\
+		    hal_inst_dir=$(PSM_HAL_ENABLE_D);					       \
+		    echo "#define PSMI_HAL_CAT_INL_SYM(KERNEL) hfp_$(subst psm_hal_,,$(PSM_HAL_ENABLE_D))"	       \
+				"## _ ## KERNEL"			     >> $(HALDECLFILE);\
+		    echo "#include \"psm2_hal_inline_t.h\""		     >> $(HALDECLFILE);\
+		else									       \
+		    echo "#define PSMI_HAL_INLINE /* nothing */"             >> $(HALDECLFILE);\
+		fi )
+
+$(HALIMPLFILE): | $(OUTDIR)
+	@test -f $(HALIMPLFILE) || ( \
+		n_hal_insts=$(words $(wildcard $(PSM_HAL_ENABLE_D)));\
+		if [ $$n_hal_insts -eq 1 ]; then\
+		    hal_inst=$(PSM_HAL_ENABLE_D);\
+		    echo "#include \"$$hal_inst/psm_hal_inline_i.h\""        >> $(HALIMPLFILE);\
+		else\
+		    echo "/* no inlining since more than 1 hal instance"     >> $(HALIMPLFILE);\
+		    echo "   is included in the libpsm2 linkage.        */"  >> $(HALIMPLFILE);\
+		fi )
 
 %_clean:
 	make OUTDIR=$* clean
@@ -301,15 +345,33 @@ clean: cleanlinks
 			rm -f $(HISTORY); \
 		fi; \
 	fi
+	rm -fr $(TEMP_INST_DIR)
+
+# Easily add more items to config target if more options need
+# to be cached.
+config: $(CONFIG_FILE)
+
+$(CONFIG_FILE):
+	@echo PSM_HAL_ENABLE=$(PSM_HAL_ENABLE) > $(CONFIG_FILE)
+	@echo CCARCH=$(CCARCH) >> $(CONFIG_FILE)
+	@echo HFI_BRAKE_DEBUG=$(HFI_BRAKE_DEBUG) >> $(CONFIG_FILE)
+	@echo PSM_DEBUG=$(PSM_DEBUG) >> $(CONFIG_FILE)
+	@echo PSM_AVX512=$(PSM_AVX512) >> $(CONFIG_FILE)
+	@echo PSM_LOG=$(PSM_LOG) >> $(CONFIG_FILE)
+	@echo PSM_LOG_FAST_IO=$(PSM_LOG_FAST_IO) >> $(CONFIG_FILE)
+	@echo PSM_PERF=$(PSM_PERF) >> $(CONFIG_FILE)
+	@echo PSM_HEAP_DEBUG=$(PSM_HEAP_DEBUG) >> $(CONFIG_FILE)
+	@echo PSM_PROFILE=$(PSM_PROFILE) >> $(CONFIG_FILE)
+	@echo PSM_CUDA=$(PSM_CUDA) >> $(CONFIG_FILE)
+	@echo Wrote $(CONFIG_FILE)
 
 mock: OUTDIR := $(MOCK_OUTDIR)
 mock:
 	$(MAKE) OUTDIR=$(OUTDIR) PSM2_MOCK_TESTING=1
 
 debug: OUTDIR := $(DEBUG_OUTDIR)
-debug: OPTIONS := PSM_DEBUG=1
 debug:
-	$(MAKE) OUTDIR=$(OUTDIR) OPTIONS=$(OPTIONS)
+	$(MAKE) OUTDIR=$(OUTDIR) PSM_DEBUG=1
 
 test_clean:
 	if [ -d ./test ]; then \
@@ -320,11 +382,12 @@ specfile_clean:
 	rm -f ${OUTDIR}/${RPM_NAME}.spec
 
 distclean: specfile_clean cleanlinks $(HISTORIC_TARGETS) test_clean
+	rm -f $(CONFIG_FILE)
 	rm -rf ${OUTDIR}/${DIST}
 	rm -f ${OUTDIR}/${DIST}.tar.gz
-	rm -fr temp.*
+	rm -fr temp.* *.rej.patch
 
-outdir:
+$(OUTDIR):
 	mkdir -p ${OUTDIR}
 
 symlinks:
@@ -357,23 +420,31 @@ endif
 	# The following files and dirs were part of the noship rpm:
 	mkdir -p ${DESTDIR}/usr/include/hfi1diag
 	mkdir -p ${DESTDIR}/usr/include/hfi1diag/linux-x86_64
-	mkdir -p ${DESTDIR}/usr/include/hfi1diag/ptl_ips
-	install -m 0644 -D ptl_ips/ipserror.h ${DESTDIR}/usr/include/hfi1diag/ptl_ips/ipserror.h
 	install -m 0644 -D include/linux-x86_64/bit_ops.h ${DESTDIR}/usr/include/hfi1diag/linux-x86_64/bit_ops.h
 	install -m 0644 -D include/linux-x86_64/sysdep.h ${DESTDIR}/usr/include/hfi1diag/linux-x86_64/sysdep.h
 	install -m 0644 -D include/opa_udebug.h ${DESTDIR}/usr/include/hfi1diag/opa_udebug.h
 	install -m 0644 -D include/opa_debug.h ${DESTDIR}/usr/include/hfi1diag/opa_debug.h
 	install -m 0644 -D include/opa_intf.h ${DESTDIR}/usr/include/hfi1diag/opa_intf.h
-	install -m 0644 -D include/opa_user.h ${DESTDIR}/usr/include/hfi1diag/opa_user.h
-	install -m 0644 -D include/opa_service.h ${DESTDIR}/usr/include/hfi1diag/opa_service.h
-	install -m 0644 -D include/opa_common.h ${DESTDIR}/usr/include/hfi1diag/opa_common.h
+	for h in opa_user_gen1.h opa_service_gen1.h opa_common_gen1.h ; do \
+		sed -e 's/#include "opa_user_gen1.h"/#include "opa_user.h"/' \
+			-e 's/#include "opa_common_gen1.h"/#include "opa_common.h"/' \
+			-e 's/#include "hfi1_deprecated_gen1.h"/#include "hfi1_deprecated.h"/' \
+			-e 's/#include "opa_service_gen1.h"/#include "opa_service.h"/' psm_hal_gen1/$$h \
+				> $(TEMP_INST_DIR)/$$h ; \
+	done
+	cat include/opa_user.h    $(TEMP_INST_DIR)/opa_user_gen1.h  > $(TEMP_INST_DIR)/opa_user.h
+	cat include/opa_service.h $(TEMP_INST_DIR)/opa_service_gen1.h > $(TEMP_INST_DIR)/opa_service.h
+	install -m 0644 -D $(TEMP_INST_DIR)/opa_user.h    ${DESTDIR}/usr/include/hfi1diag/opa_user.h
+	install -m 0644 -D $(TEMP_INST_DIR)/opa_service.h ${DESTDIR}/usr/include/hfi1diag/opa_service.h
+	install -m 0644 -D $(TEMP_INST_DIR)/opa_common_gen1.h ${DESTDIR}/usr/include/hfi1diag/opa_common.h
 	install -m 0644 -D include/opa_byteorder.h ${DESTDIR}/usr/include/hfi1diag/opa_byteorder.h
 	install -m 0644 -D include/psm2_mock_testing.h ${DESTDIR}/usr/include/hfi1diag/psm2_mock_testing.h
-	install -m 0644 -D include/hfi1_deprecated.h ${DESTDIR}/usr/include/hfi1diag/hfi1_deprecated.h
 	install -m 0644 -D include/opa_revision.h ${DESTDIR}/usr/include/hfi1diag/opa_revision.h
 	install -m 0644 -D psmi_wrappers.h ${DESTDIR}/usr/include/hfi1diag/psmi_wrappers.h
+	install -m 0644 -D psm_hal_gen1/hfi1_deprecated_gen1.h ${DESTDIR}/usr/include/hfi1diag/hfi1_deprecated.h
+	rm -fr $(TEMP_INST_DIR)
 
-specfile: outdir specfile_clean
+specfile: specfile_clean | $(OUTDIR)
 	sed -e 's/@VERSION@/'${VERSION_RELEASE}'/g' libpsm2.spec.in | \
 		sed -e 's/@TARGLIB@/'${TARGLIB}'/g' \
 			-e 's/@RPM_NAME@/'${RPM_NAME}'/g' \
@@ -398,26 +469,41 @@ specfile: outdir specfile_clean
 # the previous make dist, unless we switch to using a dedicated ./src folder
 # That will come in the next major revision of the Makefile for now we can
 # prevent the easy and default cases
+#
+# Notes on PRUNE_LIST:
+# To make the dist, we always eliminate the psm_hal_MOCK dir.
+# we also eliminate the psm hal instances that are not enabled via the PSM_HAL_ENABLE variable.
+# To implement this, we build the prune list in two passes:
+# 1.  The first pass includes all of the common items we want to exclude.
+# 2.  The second pass we include the differnce of
+#     (all of the PSM HAL instances) minus (the PSM hal instances that are enabled)
+# The final prune list is supplied to find, and the dist is created.
 dist: distclean
 	mkdir -p ${OUTDIR}/${DIST}
-	for x in $$(/usr/bin/find . 								\
-			-name ".git"                           -prune -o	\
-			-name "cscope*"                        -prune -o	\
-			-name "$(shell realpath --relative-to=${top_srcdir} ${OUTDIR})" -prune -o	\
-			-name "*.orig"                         -prune -o	\
-			-name "*~"                             -prune -o	\
-			-name "#*"                             -prune -o	\
-			-name ".gitignore"                     -prune -o	\
-			-name "doc"                            -prune -o	\
-			-name "libcm"                          -prune -o	\
-			-name "psm.supp"                       -prune -o	\
-			-name "test"                           -prune -o	\
-			-name "tools"                          -prune -o	\
-			-name "artifacts"                      -prune -o	\
-			-print); do \
-		dir=$$(dirname $$x); \
-		mkdir -p ${OUTDIR}/${DIST}/$$dir; \
-		[ ! -d $$x ] && cp $$x ${OUTDIR}/${DIST}/$$dir; \
+	PRUNE_LIST="";										\
+	for pd in ".git" "cscope*" "$(shell realpath --relative-to=${top_srcdir} ${OUTDIR})"	\
+		"*.orig" "*~" "#*" ".gitignore" "doc" "libcm" "psm.supp" "test" "psm_hal_MOCK"	\
+		 "tools" "artifacts" "*.rej.patch"; do			\
+		PRUNE_LIST="$$PRUNE_LIST -name $$pd -prune -o";					\
+	done;											\
+	for hid in psm_hal_* ; do								\
+		found=0;									\
+		for ehid in $(PSM_HAL_ENABLE_D) ; do						\
+			if [ "$$hid" = "$$ehid" ]; then						\
+				found=1;							\
+				break;								\
+			fi;									\
+		done;										\
+		if [ $$found -eq 0 ]; then							\
+			PRUNE_LIST="$$PRUNE_LIST -name $$hid -prune -o";			\
+		fi;										\
+	done;											\
+	for x in $$(/usr/bin/find .								\
+				$$PRUNE_LIST							\
+			-print); do								\
+		dir=$$(dirname $$x);								\
+		mkdir -p ${OUTDIR}/${DIST}/$$dir;						\
+		[ ! -d $$x ] && cp $$x ${OUTDIR}/${DIST}/$$dir;					\
 	done
 	if [ $(ISGIT) = 1 ] ; then git log -n1 --pretty=format:%H . > ${OUTDIR}/${DIST}/COMMIT ; fi
 	echo ${RELEASE} > ${OUTDIR}/${DIST}/rpm_release_extension
@@ -465,12 +551,10 @@ ${TARGLIB}-objs := ptl_am/am_reqrep_shmem.o	\
 		   libuuid/unparse.o		\
 		   ptl_ips/ptl.o		\
 		   ptl_ips/ptl_rcvthread.o	\
-		   ptl_ips/ipserror.o		\
 		   ptl_ips/ips_scb.o		\
 		   ptl_ips/ips_epstate.o	\
 		   ptl_ips/ips_recvq.o		\
 		   ptl_ips/ips_recvhdrq.o	\
-		   ptl_ips/ips_spio.o		\
 		   ptl_ips/ips_proto.o		\
 		   ptl_ips/ips_proto_recv.o	\
 		   ptl_ips/ips_proto_connect.o  \
@@ -482,15 +566,15 @@ ${TARGLIB}-objs := ptl_am/am_reqrep_shmem.o	\
 		   ptl_ips/ips_proto_dump.o	\
 		   ptl_ips/ips_proto_mq.o       \
 		   ptl_ips/ips_proto_am.o       \
-		   ptl_ips/ips_subcontext.o	\
 		   ptl_ips/ips_path_rec.o       \
 		   ptl_ips/ips_opp_path_rec.o   \
 		   ptl_ips/ips_writehdrq.o	\
 		   ptl_self/ptl.o		\
 		   opa/*.o			\
-		   psm_diags.o 			\
-		   psmi_wrappers.o              \
-		   psm_gdrcpy.o
+		   psm_diags.o                  \
+		   psm2_hal.o			\
+		   $(PSM_HAL_INSTANCE_OBJFILES)	\
+		   psmi_wrappers.o
 
 ${TARGLIB}-objs := $(patsubst %.o, ${OUTDIR}/%.o, ${${TARGLIB}-objs})
 
@@ -514,7 +598,7 @@ $(OUTDIR)/${TARGLIB}.so.${MAJOR}.${MINOR}: ${${TARGLIB}-objs} $(LINKER_SCRIPT_FI
 	echo "char psmi_hfi_git_checksum[] =\"`git rev-parse HEAD`\";" >> ${OUTDIR}/_revision.c
 	$(CC) -c $(CFLAGS) $(BASECFLAGS) $(INCLUDES) ${OUTDIR}/_revision.c -o $(OUTDIR)/_revision.o
 	$(CC) $(LINKER_SCRIPT) $(LDFLAGS) -o $@ -Wl,-soname=${TARGLIB}.so.${MAJOR} -shared \
-		${${TARGLIB}-objs} $(OUTDIR)/_revision.o -Lopa $(LDLIBS)
+		${${TARGLIB}-objs} $(OUTDIR)/_revision.o $(LDLIBS)
 
 $(OUTDIR)/${TARGLIB}.a: $(OUTDIR)/${TARGLIB}.so.${MAJOR}.${MINOR}
 	$(AR) rcs $(OUTDIR)/${TARGLIB}.a ${${TARGLIB}-objs} $(OUTDIR)/_revision.o
@@ -525,3 +609,5 @@ ${OUTDIR}/%.o: ${top_srcdir}/%.c
 $(LINKER_SCRIPT_FILE): psm2_linker_script_map.in
 	sed "s/_psm2_additional_globals_;/$(PSM2_ADDITIONAL_GLOBALS)/" \
 	     psm2_linker_script_map.in > ${OUTDIR}/psm2_linker_script.map
+
+.PHONY: all %_clean clean config mock debug distclean symlinks cleanlinks install specfile dist ofeddist cscope sources-checksum

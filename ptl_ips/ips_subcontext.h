@@ -63,19 +63,17 @@
 /* This data structure is allocated in ureg page of each subcontext process */
 
 struct ips_subcontext_ureg {
-	/* head/eager head/tail register storage, one per cacheline */
-	uint64_t subcontext_uregbase[ur_maxreg * 8];
+	/* head/eager head/tail register storage, one per cacheline
+	 (member is unused by PSM, but needed here to match driver structures). */
+	uint64_t subcontext_uregbase[40 /* i.e. ur_maxreg * 8 */];
 	struct ips_writehdrq_state writeq_state;	/* used in all ureg pages */
 } __attribute__ ((aligned(64)));
 
 struct ips_hwcontext_ctrl {
 	pthread_spinlock_t context_lock;	/* lock shared by all subctxts */
 	struct ips_recvhdrq_state recvq_state;	/* state shared by all subctxts */
+	uint32_t rx_hdrq_rhf_seq;               /* rhf seq for the hw hdrq shared
+						   by all subctxts */
 } __attribute__ ((aligned(64)));
-
-psm2_error_t
-ips_subcontext_ureg_get(ptl_t *ptl, uint32_t subcontext_cnt,
-			psmi_context_t *context,
-			struct ips_subcontext_ureg **uregp);
 
 #endif

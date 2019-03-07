@@ -76,11 +76,14 @@ typedef psm2_error_t(*psm_mq_unexpected_callback_fn_t)
 	 uint32_t paylen);
 #endif
 
-#define NUM_HASH_BUCKETS 64
-#define HASH_THRESHOLD 65
-#define NUM_HASH_CONFIGS 3
-#define NUM_MQ_SUBLISTS (NUM_HASH_CONFIGS + 1)
-#define REMOVE_ENTRY 1
+#define MICRO_SEC 1000000
+#define MSG_BUFFER_LEN 100
+
+struct psm2_mq_perf_data
+{
+	pthread_t perf_print_thread;
+	int perf_print_stats;
+};
 
 enum psm2_mq_tag_pattern {
 	PSM2_TAG_SRC = 0,
@@ -118,8 +121,12 @@ struct psm2_mq {
 	int memmode;
 
 	uint64_t timestamp;
+
 	psm2_mq_stats_t stats;	/**> MQ stats, accumulated by each PTL */
+
 	int print_stats;
+	struct psm2_mq_perf_data mq_perf_data;
+
 	int nohash_fastpath;
 	unsigned unexpected_hash_len;
 	unsigned unexpected_list_len;
@@ -132,24 +139,6 @@ struct psm2_mq {
 
 	psmi_lock_t progress_lock;
 };
-
-#define MQ_HFI_THRESH_TINY	8
-#define MQ_HFI_THRESH_EGR_SDMA_XEON 34000       /* Eager Xeon blocking */
-#define MQ_HFI_THRESH_EGR_SDMA_PHI2 200000      /* Eager Phi2 blocking */
-#define MQ_HFI_THRESH_EGR_SDMA_SQ_XEON 16000    /* Eager Xeon non-blocking */
-#define MQ_HFI_THRESH_EGR_SDMA_SQ_PHI2 65536    /* Eager Phi2 non-blocking */
-
-#define MQ_HFI_THRESH_RNDV_PHI2 200000
-#define MQ_HFI_THRESH_RNDV_XEON  64000
-
-#define MQ_HFI_WINDOW_RNDV_PHI2 4194304
-#define MQ_HFI_WINDOW_RNDV_XEON  131072
-
-#ifdef PSM_CUDA
-#define MQ_HFI_WINDOW_RNDV_CUDA 2097152
-#endif
-
-#define MQ_SHM_THRESH_RNDV 16000
 
 #define MQE_TYPE_IS_SEND(type)	((type) & MQE_TYPE_SEND)
 #define MQE_TYPE_IS_RECV(type)	((type) & MQE_TYPE_RECV)
@@ -210,14 +199,20 @@ typedef psm2_error_t(*mq_testwait_callback_fn_t) (psm2_mq_req_t *req);
    be exposed to the user, will not be added to the mq->completed_q.
    This flag is set if request is used by e.g. MPI_SEND */
 #define PSMI_REQ_FLAG_IS_INTERNAL (1 << 0)
+/* Identifies req as part of fast path. */
+#define PSMI_REQ_FLAG_FASTPATH    (1 << 1)
+/* Identifies req as a NORMAL operation with no special cases.*/
+#define PSMI_REQ_FLAG_NORMAL      0
 
-#define psmi_is_req_internal(req) ((req)->flags & PSMI_REQ_FLAG_IS_INTERNAL)
+#define psmi_is_req_internal(req) ((req)->flags_internal & PSMI_REQ_FLAG_IS_INTERNAL)
 
 #define psmi_assert_req_not_internal(req) psmi_assert(((req) == PSM2_MQ_REQINVALID) || \
 							(!psmi_is_req_internal(req)))
 
 /* receive mq_req, the default */
 struct psm2_mq_req {
+	struct psm2_mq_req_user req_data;
+
 	struct {
 		psm2_mq_req_t next[NUM_MQ_SUBLISTS];
 		psm2_mq_req_t prev[NUM_MQ_SUBLISTS];
@@ -229,38 +224,19 @@ struct psm2_mq_req {
 	uint32_t type;
 	psm2_mq_t mq;
 
-	/* Tag matching vars */
-	psm2_epaddr_t peer;
-	psm2_mq_tag_t tag __attribute__ ((aligned(16)));/* Alignment added
-							 * to preserve the
-							 * layout as is
-							 * expected by
-							 * existent code */
-	psm2_mq_tag_t tagsel;	/* used for receives */
-
 	/* Some PTLs want to get notified when there's a test/wait event */
 	mq_testwait_callback_fn_t testwait_callback;
 
-	/* Buffer attached to request.  May be a system buffer for unexpected
-	 * messages or a user buffer when an expected message */
-	uint8_t *buf;
-	uint32_t buf_len;
-	uint32_t error_code;
-
 	uint16_t msg_seqnum;	/* msg seq num for mctxt */
-	uint32_t recv_msglen;	/* Message length we are ready to receive */
-	uint32_t send_msglen;	/* Message length from sender */
-	uint32_t recv_msgoff;	/* Message offset into buf */
+	uint32_t recv_msgoff;	/* Message offset into req_data.buf */
 	union {
 		uint32_t send_msgoff;	/* Bytes received so far.. can be larger than buf_len */
 		uint32_t recv_msgposted;
 	};
 	uint32_t rts_reqidx_peer;
 
-	uint64_t flags;
-
-	/* Used for request to send messages */
-	void *context;		/* user context associated to sends or receives */
+	uint32_t flags_user;
+	uint32_t flags_internal;
 
 	/* Used to keep track of unexpected rendezvous */
 	mq_rts_callback_fn_t rts_callback;
@@ -272,17 +248,21 @@ struct psm2_mq_req {
 	STAILQ_HEAD(sendreq_spec_, ips_cuda_hostbuf) sendreq_prefetch;
 	uint32_t prefetch_send_msgoff;
 	int cuda_hostbuf_used;
-	cudaIpcMemHandle_t cuda_ipc_handle;
-	cudaEvent_t cuda_ipc_event;
+	CUipcMemHandle cuda_ipc_handle;
+	CUevent cuda_ipc_event;
 	uint8_t cuda_ipc_handle_attached;
-	/* is_buf_gpu_mem - used to indicate if the send or receive is issued
-	 * on a device/host buffer.
+	uint32_t cuda_ipc_offset;
+	/*
 	 * is_sendbuf_gpu_mem - Used to always select TID path on the receiver
 	 * when send is on a device buffer
 	 */
-	uint8_t is_buf_gpu_mem;
 	uint8_t is_sendbuf_gpu_mem;
 #endif
+	/*
+	 * is_buf_gpu_mem - used to indicate if the send or receive is issued
+	 * on a device/host buffer.
+	 */
+	uint8_t is_buf_gpu_mem;
 
 	/* PTLs get to store their own per-request data.  MQ manages the allocation
 	 * by allocating psm2_mq_req so that ptl_req_data has enough space for all
@@ -331,7 +311,7 @@ mq_copy_tiny(uint32_t *dest, uint32_t *src, uint8_t len))
 				 "Please enable PSM CUDA support when using GPU buffer \n");
 			return;
 		}
-		PSMI_CUDA_CALL(cudaMemcpy, dest, src, len, cudaMemcpyDefault);
+		PSMI_CUDA_CALL(cuMemcpy, (CUdeviceptr)dest, (CUdeviceptr)src, len);
 		return;
 	}
 #endif
@@ -426,37 +406,37 @@ PSMI_ALWAYS_INLINE(
 void
 mq_status_copy(psm2_mq_req_t req, psm2_mq_status_t *status))
 {
-	status->msg_tag = *((uint64_t *) req->tag.tag);
-	status->msg_length = req->send_msglen;
-	status->nbytes = req->recv_msglen;
-	status->error_code = req->error_code;
-	status->context = req->context;
+	status->msg_tag = *((uint64_t *) req->req_data.tag.tag);
+	status->msg_length = req->req_data.send_msglen;
+	status->nbytes = req->req_data.recv_msglen;
+	status->error_code = req->req_data.error_code;
+	status->context = req->req_data.context;
 }
 
 PSMI_ALWAYS_INLINE(
 void
 mq_status2_copy(psm2_mq_req_t req, psm2_mq_status2_t *status))
 {
-	status->msg_peer = req->peer;
-	status->msg_tag = req->tag;
-	status->msg_length = req->send_msglen;
-	status->nbytes = req->recv_msglen;
-	status->error_code = req->error_code;
-	status->context = req->context;
+	status->msg_peer = req->req_data.peer;
+	status->msg_tag = req->req_data.tag;
+	status->msg_length = req->req_data.send_msglen;
+	status->nbytes = req->req_data.recv_msglen;
+	status->error_code = req->req_data.error_code;
+	status->context = req->req_data.context;
 }
 
 PSMI_ALWAYS_INLINE(
 uint32_t
 mq_set_msglen(psm2_mq_req_t req, uint32_t recvlen, uint32_t sendlen))
 {
-	req->send_msglen = sendlen;
+	req->req_data.send_msglen = sendlen;
 	if (recvlen < sendlen) {
-		req->recv_msglen = recvlen;
-		req->error_code = PSM2_MQ_TRUNCATION;
+		req->req_data.recv_msglen = recvlen;
+		req->req_data.error_code = PSM2_MQ_TRUNCATION;
 		return recvlen;
 	} else {
-		req->recv_msglen = sendlen;
-		req->error_code = PSM2_OK;
+		req->req_data.recv_msglen = sendlen;
+		req->req_data.error_code = PSM2_OK;
 		return sendlen;
 	}
 }
@@ -633,10 +613,10 @@ PSMI_ALWAYS_INLINE(void psmi_mq_stats_rts_account(psm2_mq_req_t req))
 	if (MQE_TYPE_IS_SEND(req->type)) {
 		mq->stats.tx_num++;
 		mq->stats.tx_rndv_num++;
-		mq->stats.tx_rndv_bytes += req->send_msglen;
+		mq->stats.tx_rndv_bytes += req->req_data.send_msglen;
 	} else {
 		mq->stats.rx_user_num++;
-		mq->stats.rx_user_bytes += req->recv_msglen;
+		mq->stats.rx_user_bytes += req->req_data.recv_msglen;
 	}
 	return;
 }

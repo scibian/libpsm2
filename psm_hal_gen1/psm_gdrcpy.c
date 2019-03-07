@@ -52,13 +52,14 @@
 */
 #ifdef PSM_CUDA
 #include "psm_user.h"
+#include "psm2_hal.h"
 #include "psm_gdrcpy.h"
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include "ptl_ips/ips_tid.h"
 #include "ptl_ips/ips_expected_proto.h"
-
+#include "opa_user_gen1.h"
 
 static int gdr_fd;
 
@@ -141,7 +142,7 @@ handle_out_of_bar_space(struct ips_proto *proto)
 		}
 	}
 
-	lengthEvicted = ips_sdma_gpu_cache_evict(proto->fd);
+	lengthEvicted = ips_sdma_gpu_cache_evict(psmi_hal_get_fd(proto->ep->context.psm_hw_ctxt));
 	if (lengthEvicted) {
 		lastEvictTime = 0;
 		return lengthEvicted;

@@ -5,7 +5,7 @@
 
   GPL LICENSE SUMMARY
 
-  Copyright(c) 2016 Intel Corporation.
+  Copyright(c) 2017 Intel Corporation.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -21,7 +21,7 @@
 
   BSD LICENSE
 
-  Copyright(c) 2016 Intel Corporation.
+  Copyright(c) 2017 Intel Corporation.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -51,7 +51,7 @@
 
 */
 
-/* Copyright (c) 2003-2016 Intel Corporation. All rights reserved. */
+/* Copyright (c) 2003-2017 Intel Corporation. All rights reserved. */
 
 #ifndef IPS_SPIO_H
 #define IPS_SPIO_H
@@ -61,6 +61,8 @@
 #define IPS_CTXT_RESET_MAX	1000	/* max send context reset */
 struct ips_spio;
 struct ptl;
+struct ips_proto;
+struct ips_flow;
 
 /* 64B move instruction support */
 #define AVX512F_BIT		16	/* level 07h, ebx */
@@ -72,28 +74,24 @@ struct ptl;
 typedef
 void (*ips_spio_blockcpy_fn_t)(volatile uint64_t *dest,
 				const uint64_t *src, uint32_t nblock);
-#ifdef __AVX512F__
+#ifdef PSM_AVX512
 void hfi_pio_blockcpy_512(volatile uint64_t *dest,
 				const uint64_t *src, uint32_t nblock);
 #endif
-#ifdef __AVX2__
 void hfi_pio_blockcpy_256(volatile uint64_t *dest,
 				const uint64_t *src, uint32_t nblock);
-#endif
-#ifdef __SSE2__
 void hfi_pio_blockcpy_128(volatile uint64_t *dest,
 				const uint64_t *src, uint32_t nblock);
-#endif
 void hfi_pio_blockcpy_64(volatile uint64_t *dest,
 				const uint64_t *src, uint32_t nblock);
 
 
-psm2_error_t ips_spio_init(const psmi_context_t *context,
+static PSMI_HAL_INLINE psm2_error_t ips_spio_init(const psmi_context_t *context,
 				struct ptl *ptl, struct ips_spio *ctrl);
-psm2_error_t ips_spio_fini(struct ips_spio *ctrl);
+static PSMI_HAL_INLINE psm2_error_t ips_spio_fini(struct ips_spio *ctrl);
 
-psm2_error_t ips_spio_transfer_frame(struct ips_proto *proto,
-				struct ips_flow *flow, struct hfi_pbc *pbc,
+static inline psm2_error_t ips_spio_transfer_frame(struct ips_proto *proto,
+				struct ips_flow *flow, struct psm_hal_pbc *pbc,
 				uint32_t *payload, uint32_t length,
 				uint32_t isCtrlMsg, uint32_t cksum_valid,
 				uint32_t cksum
@@ -102,7 +100,7 @@ psm2_error_t ips_spio_transfer_frame(struct ips_proto *proto,
 #endif
 );
 
-psm2_error_t ips_spio_process_events(const struct ptl *ptl);
+static psm2_error_t ips_spio_process_events(const struct ptl *ptl);
 
 #define SPIO_CREDITS_Counter(value)       (((value) >> 0) & 0x7FF)
 #define SPIO_CREDITS_Status(value)        (((value) >> 11) & 0x1)
@@ -150,7 +148,6 @@ struct ips_spio_ctrl {
 struct ips_spio {
 	const psmi_context_t *context;
 	struct ptl *ptl;
-	uint32_t runtime_flags;
 	uint16_t unit_id;
 	uint16_t portnum;
 
@@ -158,7 +155,6 @@ struct ips_spio {
 	volatile __le64 *spio_credits_addr __attribute__ ((aligned(64)));
 	volatile uint64_t *spio_bufbase_sop;
 	volatile uint64_t *spio_bufbase;
-	volatile uint64_t *spio_event;
 	volatile struct ips_spio_ctrl *spio_ctrl;
 
 	uint16_t spio_frozen_count;	/* local copy */
@@ -175,14 +171,16 @@ struct ips_spio {
 	psm2_error_t (*spio_reset_hfi)(struct ips_spio *ctrl);
 	psm2_error_t (*spio_credit_return_update)(struct ips_spio *ctrl);
 
-	/* 8B copying, 16B copying, 32B copying, and 64B copying */
-	ips_spio_blockcpy_fn_t spio_blockcpy_routines[4];
-	ips_spio_blockcpy_fn_t spio_blockcpy_selected;
+	/* copying routines based on block size */
+	ips_spio_blockcpy_fn_t spio_blockcpy_med;
+	ips_spio_blockcpy_fn_t spio_blockcpy_large;
 
 #ifdef PSM_CUDA
 	/* Use an intermediate buffer when writing PIO data from the
 	   GPU to ensure that we follow the HFI's write ordering rules. */
 	unsigned char *cuda_pio_buffer;
+
+#define MAX_CUDA_MTU 10240
 #endif
 };
 
