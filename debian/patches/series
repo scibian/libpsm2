@@ -1,3 +1,2 @@
 fix-Makefile-version.patch
 fortify_source.patch
-Remove_unnecessary_long_waiting_timeout_for_HFI_driver.patch

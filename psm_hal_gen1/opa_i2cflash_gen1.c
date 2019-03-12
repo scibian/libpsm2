@@ -62,7 +62,7 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "opa_user.h"
+#include "opa_user_gen1.h"
 
 uint8_t hfi_flash_csum(struct hfi_flash *ifp, int adjust)
 {

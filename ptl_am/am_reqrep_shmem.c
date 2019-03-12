@@ -488,9 +488,7 @@ psm2_error_t psmi_shm_map_remote(ptl_t *ptl_gen, psm2_epid_t epid, uint16_t *shm
 	action_stash.addr = dest_mapptr;
 	action_stash.len = segsz;
 
-	struct sigaction act;
-	act.sa_sigaction = amsh_mmap_fault;
-	act.sa_flags = SA_SIGINFO;
+	struct sigaction act = { .sa_sigaction = amsh_mmap_fault, .sa_flags = SA_SIGINFO };
 
 	sigaction(SIGSEGV, &act, &action_stash.SIGSEGV_old_act);
 	sigaction(SIGBUS, &act, &action_stash.SIGBUS_old_act);
@@ -1953,9 +1951,9 @@ amsh_mq_rndv(ptl_t *ptl, psm2_mq_t mq, psm2_mq_req_t req,
 
 	psmi_assert(req != NULL);
 	req->type = MQE_TYPE_SEND;
-	req->buf = (void *)buf;
-	req->buf_len = len;
-	req->send_msglen = len;
+	req->req_data.buf = (void *)buf;
+	req->req_data.buf_len = len;
+	req->req_data.send_msglen = len;
 	req->send_msgoff = 0;
 
 #ifdef PSM_CUDA
@@ -1969,23 +1967,33 @@ amsh_mq_rndv(ptl_t *ptl, psm2_mq_t mq, psm2_mq_req_t req,
 			/* Offset in GPU buffer from which we copy data, we have to
 			 * send it separetly because this offset is lost
 			 * when cuIpcGetMemHandle  is called */
-			req->send_msgoff = buf - (void*)buf_base_ptr;
-			args[2].u32w0 = (uint32_t)req->send_msgoff;
+			req->cuda_ipc_offset = buf - (void*)buf_base_ptr;
+			args[2].u32w0 = (uint32_t)req->cuda_ipc_offset;
 
 			PSMI_CUDA_CALL(cuIpcGetMemHandle,
 				      &req->cuda_ipc_handle,
 				      (CUdeviceptr) buf);
-			psmi_amsh_short_request(ptl, epaddr, mq_handler_hidx,
-						args, 5, (void*)&req->cuda_ipc_handle,
-						sizeof(CUipcMemHandle), 0);
+			if (req->flags_internal & PSMI_REQ_FLAG_FASTPATH) {
+				psmi_am_reqq_add(AMREQUEST_SHORT, ptl,
+						 epaddr, mq_handler_hidx,
+						 args, 5, (void*)&req->cuda_ipc_handle,
+						 sizeof(CUipcMemHandle), NULL, 0);
+			} else {
+				psmi_amsh_short_request(ptl, epaddr, mq_handler_hidx,
+							args, 5, (void*)&req->cuda_ipc_handle,
+							sizeof(CUipcMemHandle), 0);
+			}
 			req->cuda_ipc_handle_attached = 1;
 		} else
+#endif
+		if (req->flags_internal & PSMI_REQ_FLAG_FASTPATH) {
+			psmi_am_reqq_add(AMREQUEST_SHORT, ptl,
+					 epaddr, mq_handler_hidx,
+					 args, 5, NULL, 0, NULL, 0);
+		} else {
 			psmi_amsh_short_request(ptl, epaddr, mq_handler_hidx,
 						args, 5, NULL, 0, 0);
-#else
-		psmi_amsh_short_request(ptl, epaddr, mq_handler_hidx,
-					args, 5, NULL, 0, 0);
-#endif
+		}
 
 	return err;
 }
@@ -1996,8 +2004,8 @@ amsh_mq_rndv(ptl_t *ptl, psm2_mq_t mq, psm2_mq_req_t req,
 PSMI_ALWAYS_INLINE(
 psm2_error_t
 amsh_mq_send_inner(psm2_mq_t mq, psm2_mq_req_t req, psm2_epaddr_t epaddr,
-		   uint32_t flags, psm2_mq_tag_t *tag, const void *ubuf,
-		   uint32_t len))
+		   uint32_t flags_user, uint32_t flags_internal, psm2_mq_tag_t *tag,
+		   const void *ubuf, uint32_t len))
 {
 	psm2_amarg_t args[3];
 	psm2_error_t err = PSM2_OK;
@@ -2016,7 +2024,7 @@ amsh_mq_send_inner(psm2_mq_t mq, psm2_mq_req_t req, psm2_epaddr_t epaddr,
 		gpu_mem = 0;
 #endif
 
-	if (!flags && len <= AMLONG_MTU) {
+	if (!flags_user && len <= AMLONG_MTU) {
 		if (len <= 32)
 			args[0].u32w0 = MQ_MSG_TINY;
 		else
@@ -2025,9 +2033,15 @@ amsh_mq_send_inner(psm2_mq_t mq, psm2_mq_req_t req, psm2_epaddr_t epaddr,
 		args[1].u32w0 = tag->tag[1];
 		args[2].u32w1 = tag->tag[2];
 
-		psmi_amsh_short_request(epaddr->ptlctl->ptl, epaddr,
-					mq_handler_hidx, args, 3, ubuf, len, 0);
-	} else if (flags & PSM2_MQ_FLAG_SENDSYNC)
+		if (flags_internal & PSMI_REQ_FLAG_FASTPATH) {
+			psmi_am_reqq_add(AMREQUEST_SHORT, epaddr->ptlctl->ptl,
+					 epaddr, mq_handler_hidx,
+					 args, 3, (void *)ubuf, len, NULL, 0);
+		} else {
+			psmi_amsh_short_request(epaddr->ptlctl->ptl, epaddr,
+				mq_handler_hidx, args, 3, ubuf, len, 0);
+		}
+	} else if (flags_user & PSM2_MQ_FLAG_SENDSYNC)
 		goto do_rendezvous;
 	else if (len <= mq->shm_thresh_rv) {
 		uint32_t bytes_left = len;
@@ -2038,9 +2052,15 @@ amsh_mq_send_inner(psm2_mq_t mq, psm2_mq_req_t req, psm2_epaddr_t epaddr,
 		args[1].u32w1 = tag->tag[0];
 		args[1].u32w0 = tag->tag[1];
 		args[2].u32w1 = tag->tag[2];
-		psmi_amsh_short_request(epaddr->ptlctl->ptl, epaddr,
-					mq_handler_hidx, args, 3, buf,
-					bytes_this, 0);
+		if (flags_internal & PSMI_REQ_FLAG_FASTPATH) {
+			psmi_am_reqq_add(AMREQUEST_SHORT, epaddr->ptlctl->ptl,
+					 epaddr, mq_handler_hidx,
+					 args, 3, buf, bytes_this, NULL, 0);
+		} else {
+			psmi_amsh_short_request(epaddr->ptlctl->ptl, epaddr,
+						mq_handler_hidx, args, 3, buf,
+						bytes_this, 0);
+		}
 		bytes_left -= bytes_this;
 		buf += bytes_this;
 		args[2].u32w0 = 0;
@@ -2049,9 +2069,15 @@ amsh_mq_send_inner(psm2_mq_t mq, psm2_mq_req_t req, psm2_epaddr_t epaddr,
 			bytes_this = min(bytes_left, AMLONG_MTU);
 			/* Here we kind of bend the rules, and assume that shared-memory
 			 * active messages are delivered in order */
-			psmi_amsh_short_request(epaddr->ptlctl->ptl, epaddr,
-						mq_handler_data_hidx, args,
-						3, buf, bytes_this, 0);
+			if (flags_internal & PSMI_REQ_FLAG_FASTPATH) {
+				psmi_am_reqq_add(AMREQUEST_SHORT, epaddr->ptlctl->ptl,
+						 epaddr, mq_handler_data_hidx,
+						 args, 3, buf, bytes_this, NULL, 0);
+			} else {
+				psmi_amsh_short_request(epaddr->ptlctl->ptl, epaddr,
+							mq_handler_data_hidx, args,
+							3, buf, bytes_this, 0);
+			}
 			buf += bytes_this;
 			bytes_left -= bytes_this;
 		}
@@ -2061,14 +2087,14 @@ do_rendezvous:
 			req = psmi_mq_req_alloc(mq, MQE_TYPE_SEND);
 			if_pf(req == NULL)
 			    return PSM2_NO_MEMORY;
-			req->send_msglen = len;
-			req->tag = *tag;
+			req->req_data.send_msglen = len;
+			req->req_data.tag = *tag;
 
 			/* Since SEND command is blocking, this request is
 			 * entirely internal and we will not be exposed to user.
 			 * Setting as internal so it will not be added to
 			 * mq->completed_q */
-			req->flags |= PSMI_REQ_FLAG_IS_INTERNAL;
+			req->flags_internal |= (flags_internal | PSMI_REQ_FLAG_IS_INTERNAL);
 		}
 #ifdef PSM_CUDA
 		/* CUDA documentation dictates the use of SYNC_MEMOPS attribute
@@ -2113,24 +2139,25 @@ do_rendezvous:
 
 static
 psm2_error_t
-amsh_mq_isend(psm2_mq_t mq, psm2_epaddr_t epaddr, uint32_t flags,
-	      psm2_mq_tag_t *tag, const void *ubuf, uint32_t len, void *context,
-	      psm2_mq_req_t *req_o)
+amsh_mq_isend(psm2_mq_t mq, psm2_epaddr_t epaddr, uint32_t flags_user,
+	      uint32_t flags_internal, psm2_mq_tag_t *tag, const void *ubuf,
+	      uint32_t len, void *context, psm2_mq_req_t *req_o)
 {
 	psm2_mq_req_t req = psmi_mq_req_alloc(mq, MQE_TYPE_SEND);
 	if_pf(req == NULL)
 	    return PSM2_NO_MEMORY;
 
-	req->send_msglen = len;
-	req->tag = *tag;
-	req->context = context;
-
+	req->req_data.send_msglen = len;
+	req->req_data.tag = *tag;
+	req->req_data.context = context;
+	req->flags_user = flags_user;
+	req->flags_internal = flags_internal;
 	_HFI_VDBG("[ishrt][%s->%s][n=0][b=%p][l=%d][t=%08x.%08x.%08x]\n",
 		  psmi_epaddr_get_name(epaddr->ptlctl->ep->epid),
 		  psmi_epaddr_get_name(epaddr->epid), ubuf, len,
 		  tag->tag[0], tag->tag[1], tag->tag[2]);
 
-	amsh_mq_send_inner(mq, req, epaddr, flags, tag, ubuf, len);
+	amsh_mq_send_inner(mq, req, epaddr, flags_user, flags_internal, tag, ubuf, len);
 
 	*req_o = req;
 	return PSM2_OK;
@@ -2146,7 +2173,7 @@ amsh_mq_send(psm2_mq_t mq, psm2_epaddr_t epaddr, uint32_t flags,
 		  psmi_epaddr_get_name(epaddr->epid), ubuf, len,
 		  tag->tag[0], tag->tag[1], tag->tag[2]);
 
-	amsh_mq_send_inner(mq, NULL, epaddr, flags, tag, ubuf, len);
+	amsh_mq_send_inner(mq, NULL, epaddr, flags, PSMI_REQ_FLAG_NORMAL, tag, ubuf, len);
 
 	return PSM2_OK;
 }

@@ -26,7 +26,7 @@ Copyright: 1995-2005 Jean-loup Gailly and Mark Adler
 License: BSD-3-Clause/zlib
 
 Files: debian/*
-Copyright: 2016-2018 System Fabric Works, Inc.
+Copyright: 2016-2019 System Fabric Works, Inc.
            2017 Intel Corporation
 License: GPL-2 or BSD-3-Clause/Intel
 
@@ -62,8 +62,8 @@ License: BSD-3-Clause/Intel
  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  .
- Copyright(c) 2014-2017 Intel Corporation. All rights reserved.
- Copyright(c) 2016-2018 System Fabric Works, Inc. All Rights Reserved.
+ Copyright(c) 2014-2018 Intel Corporation. All rights reserved.
+ Copyright(c) 2016-2019 System Fabric Works, Inc. All Rights Reserved.
 
 License: BSD-3-Clause/TT
  Redistribution and use in source and binary forms, with or without

@@ -65,8 +65,7 @@ psm2_error_t psmi_context_interrupt_set(psmi_context_t *context, int enable)
 	int poll_type;
 	int ret;
 
-	if ((enable && psmi_hal_has_status(PSM_HAL_PSMI_RUNTIME_INTR_ENABLED)) ||
-	    (!enable && !psmi_hal_has_status(PSM_HAL_PSMI_RUNTIME_INTR_ENABLED)))
+	if (!enable == !psmi_hal_has_sw_status(PSM_HAL_PSMI_RUNTIME_INTR_ENABLED))
 		return PSM2_OK;
 
 	if (enable)
@@ -80,16 +79,16 @@ psm2_error_t psmi_context_interrupt_set(psmi_context_t *context, int enable)
 		return PSM2_EP_NO_RESOURCES;
 	else {
 		if (enable)
-			psmi_hal_add_status(PSM_HAL_PSMI_RUNTIME_INTR_ENABLED);
+			psmi_hal_add_sw_status(PSM_HAL_PSMI_RUNTIME_INTR_ENABLED);
 		else
-			psmi_hal_sub_status(PSM_HAL_PSMI_RUNTIME_INTR_ENABLED);
+			psmi_hal_sub_sw_status(PSM_HAL_PSMI_RUNTIME_INTR_ENABLED);
 		return PSM2_OK;
 	}
 }
 
 int psmi_context_interrupt_isenabled(psmi_context_t *context)
 {
-	return psmi_hal_has_status(PSM_HAL_PSMI_RUNTIME_INTR_ENABLED);
+	return psmi_hal_has_sw_status(PSM_HAL_PSMI_RUNTIME_INTR_ENABLED);
 }
 
 /* Returns 1 when all of the active units have their free contexts
@@ -504,7 +503,7 @@ psmi_context_open(const psm2_ep_t ep, long unit_param, long port,
 		/* open this unit. */
 		int rv = psmi_hal_context_open(unit_id, port, open_timeout,
 					       ep, job_key, context,
-					       psmi_hal_has_status(PSM_HAL_PSMI_RUNTIME_RX_THREAD_STARTED),
+					       psmi_hal_has_sw_status(PSM_HAL_PSMI_RUNTIME_RX_THREAD_STARTED),
 					       HAL_CONTEXT_OPEN_RETRY_MAX);
 
 		/* go to next unit if failed to open. */
@@ -545,7 +544,6 @@ psmi_context_open(const psm2_ep_t ep, long unit_param, long port,
 	int ctxt          = psmi_hal_get_context(context->psm_hw_ctxt);
 	int subctxt       = psmi_hal_get_subctxt(context->psm_hw_ctxt);
 	uint32_t hfi_type = psmi_hal_get_hfi_type(context->psm_hw_ctxt);
-	ep->mtu           = psmi_hal_get_mtu(context->psm_hw_ctxt);
 	context->ep       = (psm2_ep_t) ep;
 
 	/* Construct epid for this Endpoint */

@@ -1,3 +1,9 @@
+libpsm2 (11.2.80-1-1ifs+deb9) stretch; urgency=medium
+
+  * Import libpsm2 11.2.80-1 from IFS RHEL76 10.9.1.0.15 upstream.
+
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Tue, 12 Mar 2019 16:43:38 -0500
+
 libpsm2 (11.2.23-1-1ifs+deb9) stretch; urgency=medium
 
   * Import libpsm2 11.2.23-1 from IFS RHEL75 10.8.0.0.204 upstream.

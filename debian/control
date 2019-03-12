@@ -5,8 +5,9 @@ Priority: extra
 Standards-Version: 3.9.8
 Homepage: http://www.intel.com
 Build-Depends: debhelper (>= 10),
-               libnuma-dev,
                dh-autoreconf,
+               ifs-kernel-updates-dev,
+               libnuma-dev,
                quilt,
                systemd,
 

@@ -53,10 +53,10 @@
 
 /* Copyright (c) 2003-2014 Intel Corporation. All rights reserved. */
 
-#ifndef OPA_COMMON_H
-#define OPA_COMMON_H
+#ifndef OPA_COMMON_GEN1_H
+#define OPA_COMMON_GEN1_H
 
 #include <rdma/hfi/hfi1_user.h>
-#include "hfi1_deprecated.h"
+#include "hfi1_deprecated_gen1.h"
 
-#endif /* OPA_COMMON_H */
+#endif /* OPA_COMMON_GEN1_H */
