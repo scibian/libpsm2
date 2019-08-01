@@ -1,3 +1,9 @@
+libpsm2 (11.2.80-1-1ifs+deb9sci9+opa10.9u1) scibian9+opa10.9; urgency=medium
+
+  * New release version scibian9+opa10.9.
+
+ -- MHamed Bouaziz <mhamed-externe.bouaziz@edf.fr>  Thu, 01 Aug 2019 14:28:45 +0200
+
 libpsm2 (11.2.80-1-1ifs+deb9) stretch; urgency=medium
 
   * Import libpsm2 11.2.80-1 from IFS RHEL76 10.9.1.0.15 upstream.
