@@ -59,7 +59,7 @@
 #include <sys/types.h>
 #include "ptl_ips/ips_tid.h"
 #include "ptl_ips/ips_expected_proto.h"
-
+#include "opa_user_gen1.h"
 
 static int gdr_fd;
 

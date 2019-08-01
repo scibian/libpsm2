@@ -67,8 +67,7 @@
 #include <fcntl.h>
 #include <malloc.h>
 
-#include "ipserror.h"
-#include "opa_user.h"
+#include "opa_user_gen1.h"
 #include "opa_udebug.h"
 
 #include <sched.h>
