@@ -545,7 +545,7 @@ psm2_error_t __psm2_ep_epid_lookup2(psm2_ep_t ep, psm2_epid_t epid, psm2_epconn_
 	}
 
 	if (epconn == NULL) {
-		err = psmi_handle_error(NULL, PSM2_PARAM_ERR,
+		err = psmi_handle_error(ep, PSM2_PARAM_ERR,
 					"Invalid output parameter");
 		PSM2_LOG_MSG("leaving");
 		return err;
@@ -562,7 +562,7 @@ psm2_error_t __psm2_ep_epid_lookup2(psm2_ep_t ep, psm2_epid_t epid, psm2_epconn_
 		return err;
 	}
 
-	err = psmi_handle_error(NULL, PSM2_EPID_UNKNOWN,
+	err = psmi_handle_error(ep, PSM2_EPID_UNKNOWN,
 				"Endpoint connection status unknown");
 	PSM2_LOG_MSG("leaving");
 	return err;
@@ -1391,7 +1391,7 @@ psmi_ep_open_device(const psm2_ep_t ep,
 		/* If enabled, use the pollurg capability to implement a receive
 		 * interrupt thread that can handle urg packets */
 		if (rcvthread_flags) {
-			psmi_hal_add_status(PSM_HAL_PSMI_RUNTIME_RTS_RX_THREAD);
+			psmi_hal_add_sw_status(PSM_HAL_PSMI_RUNTIME_RTS_RX_THREAD);
 #ifdef PSMI_PLOCK_IS_NOLOCK
 			psmi_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
 					  "#define PSMI_PLOCK_IS_NOLOCK not functional yet "

@@ -2,12 +2,12 @@ Description: Correct computation of version and arch in makery.
  Upstream uses GIT tags to determine the build version. Use the SPEC file, instead.
 Author: Brian T. Smith <bsmith@systemfabricworks.com>
 Forwarded: not required
-Last-Update: <2018-09-20>
+Last-Update: <2019-01-30>
 ---
 This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
 --- a/Makefile
 +++ b/Makefile
-@@ -189,12 +189,13 @@
+@@ -195,12 +195,13 @@
  export 	LIBPSM2_COMPAT_CONF_DIR
  
  # The desired version number comes from the most recent tag starting with "v"

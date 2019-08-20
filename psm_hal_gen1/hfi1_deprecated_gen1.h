@@ -53,7 +53,7 @@
 
 /*
 
-  hfi1_deprecated.h
+  hfi1_deprecated_gen1.h
 
   Contains certain features of the hfi1 module that have been deprecated.
 
@@ -61,9 +61,9 @@
   reasons of backwards compatibility.
  */
 
-#ifndef __HFI1_DEPRECATED_H__
+#ifndef __HFI1_DEPRECATED_GEN1_H__
 
-#define __HFI1_DEPRECATED_H__
+#define __HFI1_DEPRECATED_GEN1_H__
 
 /* First, include the current hfi1_user.h file: */
 
@@ -178,4 +178,4 @@ struct sdma_req_info_v6_3 {
 	__u16 comp_idx;
 } __attribute__((packed));
 
-#endif /* #ifndef __HFI1_DEPRECATED_H__ */
+#endif /* #ifndef __HFI1_DEPRECATED_GEN1_H__ */

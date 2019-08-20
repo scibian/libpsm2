@@ -1,3 +1,9 @@
+libpsm2 (11.2.80-1-1ifs+deb8) jessie; urgency=medium
+
+  * Import libpsm2 11.2.80-1 from IFS RHEL76 10.9.1.0.15 upstream.
+
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Thu, 07 Mar 2019 17:54:09 -0600
+
 libpsm2 (11.2.23-1-1ifs+deb8sci8+opa10.8u1) scibian8+opa10.8; urgency=medium
 
   * New version ifs kernel updates.
