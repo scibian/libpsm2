@@ -28,6 +28,7 @@ License: BSD-3-Clause/zlib
 Files: debian/*
 Copyright: 2016-2019 System Fabric Works, Inc.
            2017 Intel Corporation
+           2019 Scibian Project <legal@scibian.org>
 License: GPL-2 or BSD-3-Clause/Intel
 
 License: GPL-2
