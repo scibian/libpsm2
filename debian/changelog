@@ -1,3 +1,11 @@
+libpsm2 (11.2.80-1-1ifs+deb8sci8+opa10.9u1) scibian8+opa10.9; urgency=medium
+
+  * New scibian8+opa10.9 release
+  * Remove patch to fix 15s timeout during psm2_init() merged upstream
+  * Re-scibianize d/copyright
+
+ -- Rémi Palancher <remi-externe.palancher@edf.fr>  Tue, 20 Aug 2019 09:50:56 +0200
+
 libpsm2 (11.2.80-1-1ifs+deb8) jessie; urgency=medium
 
   * Import libpsm2 11.2.80-1 from IFS RHEL76 10.9.1.0.15 upstream.
