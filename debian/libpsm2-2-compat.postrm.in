@@ -1,0 +1,18 @@
+#!/bin/sh
+
+set -e
+
+if [ "$1" != "remove" ] || [ "$1" != "disappear" ]
+then
+    update-alternatives --remove libpsm_infinipath.so.@PSM_LIB_MAJOR@ \
+        /usr/lib/libpsm2-2/libpsm_infinipath.so.@PSM_LIB_VERSION@
+fi
+
+# trigger hfi1 devices to remove /dev/ipath symlink
+if [ -L /dev/ipath ] ; then
+	udevadm trigger -y hfi1_\* || true
+fi
+
+#DEBHELPER#
+
+exit 0

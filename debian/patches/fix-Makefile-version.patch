@@ -1,0 +1,25 @@
+Description: Correct computation of version and arch in makery.
+ Upstream uses GIT tags to determine the build version. Use the SPEC file, instead.
+Author: Brian T. Smith <bsmith@systemfabricworks.com>
+Forwarded: not required
+Last-Update: <2019-01-30>
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+--- a/Makefile
++++ b/Makefile
+@@ -195,12 +195,13 @@
+ export 	LIBPSM2_COMPAT_CONF_DIR
+ 
+ # The desired version number comes from the most recent tag starting with "v"
+-ifeq (true, $(shell git rev-parse --is-inside-work-tree 2>/dev/null))
++# Debian: disable GIT versioning
++ifeq (true, false)
+ ISGIT := 1 # Cache the result for later
+ # Note, we don't define ISGIT if we are not in a git folder
+ VERSION := $(shell git describe --tags --abbrev=0 --match='psm-v*' | sed -e 's/^psm-v//' -e 's/-/_/')
+ else
+-ISGIT := 0
++ISGIT := $(shell grep Version: debian/rhel/libpsm2.spec | cut -f2 -d: | sed 's/ //')
+ VERSION := version
+ endif
+ 

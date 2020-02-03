@@ -1,0 +1,16 @@
+#! /bin/sh
+
+set -e
+
+update-alternatives --install /usr/lib/@DEB_HOST_MULTIARCH@/libpsm_infinipath.so.@PSM_LIB_MAJOR@ \
+	libpsm_infinipath.so.@PSM_LIB_MAJOR@ \
+    /usr/lib/libpsm2-2/libpsm_infinipath.so.@PSM_LIB_VERSION@ 50
+
+# trigger hfi1 devices to create /dev/ipath
+if [ ! -e /dev/ipath ] ; then
+	udevadm trigger -y hfi1_\* || true
+fi
+
+#DEBHELPER#
+
+exit 0
