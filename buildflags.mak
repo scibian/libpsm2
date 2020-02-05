@@ -80,7 +80,7 @@ else
 	anerr := $(error Unknown Fortran compiler arch: ${FCARCH})
 endif # gfortran
 
-BASECFLAGS += $(BASE_FLAGS) -pthread
+BASECFLAGS := $(BASE_FLAGS) -pthread
 LDFLAGS += $(BASE_FLAGS)
 ASFLAGS += $(BASE_FLAGS)
 

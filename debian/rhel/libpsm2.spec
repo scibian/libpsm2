@@ -50,7 +50,7 @@
 #
 Summary: Intel PSM2 Libraries
 Name: libpsm2
-Version: 11.2.80
+Version: 11.2.89
 Release: 1
 License: BSD or GPLv2
 URL: https://github.com/intel/opa-psm2/
@@ -58,7 +58,7 @@ URL: https://github.com/intel/opa-psm2/
 # The tarball can be created by:
 # git clone https://github.com/intel/opa-psm2
 # cd opa-psm2
-# git checkout c4650827d91cc43560a4ee992b658d31a654c201
+# git checkout 9ff82eef089cf9fe01935598bbb04f3aa6b185d2
 # make dist
 Source0: libpsm2-%{version}.tar.gz
 
@@ -136,7 +136,6 @@ with Intel(R) OPA PSM2, libpsm2.
 %setup -q -n libpsm2-%{version}
 
 %build
-export CFLAGS="%{optflags}"
 make %{?_smp_mflags}
 
 %install

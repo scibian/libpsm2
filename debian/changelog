@@ -1,3 +1,9 @@
+libpsm2 (11.2.89-1-1ifs+deb9) stretch; urgency=medium
+
+  * New upstream version 11.2.89-1 from IFS RHEL76 10.10.1.0.36.
+
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Wed, 05 Feb 2020 17:03:53 -0600
+
 libpsm2 (11.2.80-1-1ifs+deb9) stretch; urgency=medium
 
   * Import libpsm2 11.2.80-1 from IFS RHEL76 10.9.1.0.15 upstream.
