@@ -1,0 +1,3 @@
+etc/modprobe.d/libpsm2-compat.conf
+lib/udev/rules.d/40-psm-compat.rules
+usr/lib/libpsm2-2

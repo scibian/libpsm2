@@ -1,0 +1,47 @@
+## Upgrading the upstream source for libpsm2
+
+Obtain the SRPM for libpsm2 and install it:
+
+  rpm -i libpsm2-VERSION.src.rpm
+
+This will extract the SRPM contents to:
+
+  $HOME/rpmbuild/SPEC - contains libpsm2.spec
+  $HOME/rpmbuild/SOURCES - contains the source tarball
+
+Look at libpsm2.spec for the version and release information. The 
+upstream version to use with debian is VERSION-RELEASE, with underscores
+converted to dashes.
+
+For example, if version is 3.10.0_693 and release is 1514, the upstream 
+version would be 3.10.0-693-1514.
+
+The upstream source is upgraded via the gbp tool. The repository's upstream
+and pristine-tar branches need to be tracked locally.
+
+  $ git checkout pristine-tar
+  $ git checkout upstream
+  $ git checkout master   # or the branch to merge into
+
+Next, clean the working directory and use gbp to import the upstream code:
+
+  $ git clean -xfd .
+  $ git checkout .
+  $ gbp import-orig ~/rpmbuild/SOURCES/libpsm2-VERSION.tar.bz2
+
+If the branch to merge into is not master, add the flag --debian-branch= with 
+the branch to merge into.
+
+When prompted by gbp for the upstream version, enter the upstream version
+that was determined earlier in this process.
+
+After the merge, copy the following to debian/rhel and commit to git:
+
+  $HOME/rpmbuild/SPEC/libpsm2.spec
+
+Once everything is merged and committed, execute the following from the 
+development branch:
+
+  $ git push
+  $ git push --tags
+
