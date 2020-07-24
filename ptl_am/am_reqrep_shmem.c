@@ -239,7 +239,7 @@ psm2_error_t psmi_shm_create(ptl_t *ptl_gen)
 	void *mapptr;
 	size_t segsz;
 	psm2_error_t err = PSM2_OK;
-	int shmfd;
+	int shmfd = -1;
 	char *amsh_keyname;
 	int iterator;
 	/* Get which kassist mode to use. */
@@ -330,7 +330,7 @@ psm2_error_t psmi_shm_create(ptl_t *ptl_gen)
 					strerror(errno));
 		goto fail;
 	}
-	close(shmfd);
+
 	memset((void *) mapptr, 0, segsz); /* touch all of my pages */
 
 	/* Our own ep's info for ptl_am resides at the start of the
@@ -341,6 +341,7 @@ psm2_error_t psmi_shm_create(ptl_t *ptl_gen)
 	ptl->self_nodeinfo->amsh_shmbase = (uintptr_t) mapptr;
 
 fail:
+	if (shmfd >= 0) close(shmfd);
 	return err;
 }
 
