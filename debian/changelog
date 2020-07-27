@@ -1,0 +1,90 @@
+libpsm2 (11.2.89-1-1ifs+deb8sci8opa10.10u1) scibian8opa10.10; urgency=medium
+
+  [ Brian T. Smith ]
+  * Import Debian changes 11.2.89-1-1ifs+deb8
+
+  [ MHamed Bouaziz ]
+
+ -- MHamed Bouaziz <mhamed-externe.bouaziz@edf.fr>  Fri, 24 Jul 2020 17:59:32 +0200
+
+libpsm2 (11.2.89-1-1ifs+deb8) jessie; urgency=medium
+
+  * New upstream version 11.2.89-1 from IFS RHEL76 10.10.1.0.36.
+
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Mon, 03 Feb 2020 13:36:02 -0600
+
+libpsm2 (11.2.80-1-1ifs+deb8) jessie; urgency=medium
+
+  * Import libpsm2 11.2.80-1 from IFS RHEL76 10.9.1.0.15 upstream.
+
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Thu, 07 Mar 2019 17:54:09 -0600
+
+libpsm2 (11.2.23-1-1ifs+deb8) jessie; urgency=medium
+
+  * Import libpsm2 11.2.23-1 from IFS RHEL75 10.8.0.0.204 upstream.
+  * Correct call to udevadm in package trigger scripts.
+  * Patch from upstream to fix 15s timeout during psm2_init().
+
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Tue, 04 Dec 2018 13:38:28 -0600
+
+libpsm2 (10.3.35-1-1ifs+deb8) jessie; urgency=medium
+
+  * Import libpsm2 10.3.35-1 from IFS 10.7.0.0.145 upstream.
+  * Manage /dev/ipath during compat package install/uninstall.
+  * Use debian alternatives for compat library.
+
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Thu, 21 Jun 2018 12:44:09 -0500
+
+libpsm2 (10.3.3-1-1ifs) jessie; urgency=medium
+
+  * Import libpsm2 10.3.3-1 from IFS 10.6.0.0.134 upstream.
+  * Use git packaging and pristine-tar.
+
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Tue, 17 Oct 2017 15:34:11 -0500
+
+libpsm2 (10.2.235-1-1ifs) jessie; urgency=medium
+
+  * Import libpsm2 10.2.235-1 from IFS 10.5.0.0.155 upstream.
+  * Changed libpsm2 binary package to libpsm2-2, clean up lintian
+    soname mismatch.
+
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Mon, 18 Sep 2017 14:15:29 -0500
+
+libpsm2 (10.2.175-1-1ifs) jessie; urgency=medium
+
+  * Import libpsm2 10.2.175-1 from IFS 10.4.2.0.7 upstream.
+
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Tue, 11 Jul 2017 14:12:22 -0500
+
+libpsm2 (10.2.63-1-1ifs) jessie; urgency=medium
+
+  * Convert to quilt.
+
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Wed, 07 Jun 2017 19:11:31 -0500
+
+libpsm2 (10.2.63) jessie; urgency=medium
+
+  * Imported libpsm2 10.2.63 from IFS 10.3.1.0.19 upstream
+  * Corrected computation of size for job_key
+
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Tue, 30 May 2017 10:24:35 -0500
+
+libpsm2 (10.2.59.1) jessie; urgency=medium
+
+  * Imported libpsm2 10.2.59-1 from IFS 10.3.0.1.5 upstream
+
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Fri, 06 Jan 2017 18:18:35 -0600
+
+libpsm2 (10.2.58) jessie; urgency=medium
+
+  * Imported libpsm2 10.2.58 from IFS 10.3.0.0.81 upstream
+
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Fri, 16 Dec 2016 18:04:35 -0600
+
+libpsm2 (10.2.42.1) jessie; urgency=medium
+
+  * Imported libpsm2 10.2.42-1 from IFS 10.2.0.0.158 upstream
+  * Replaces hfi1-psm, hfi1-psm-dev and hfi1-psm-compat
+
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Fri, 30 Sep 2016 13:31:35 -0500
+
