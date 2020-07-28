@@ -1,3 +1,9 @@
+libpsm2 (11.2.89-1-1ifs+deb9sci9opa10.10u2) scibian9+opa10.10; urgency=medium
+
+  * New release version 
+
+ -- MHamed Bouaziz <mhamed-externe.bouaziz@edf.fr>  Tue, 28 Jul 2020 15:20:03 +0200
+
 libpsm2 (11.2.89-1-1ifs+deb9sci9opa10.10u1) scibian9opa10.10; urgency=medium
 
   [ M'hamed Bouaziz ]
