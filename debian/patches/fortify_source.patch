@@ -1,23 +1,23 @@
 Description: Add _FORTIFY_SOURCE flags
  Specify _FORTIFY_SOURCE for both debug and normal builds.
 Author: Brian T. Smith <bsmith@systemfabricworks.com>
-Last-Update: 2019-01-30
+Last-Update: 2020-12-10
 ---
 This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
 --- a/buildflags.mak
 +++ b/buildflags.mak
-@@ -163,7 +163,7 @@
+@@ -158,7 +158,7 @@
  ifneq (,${PSM_DEBUG})
-   BASECFLAGS += -O -g3 -DPSM_DEBUG -D_HFI_DEBUGGING -funit-at-a-time -Wp,-D_FORTIFY_SOURCE=2
+ 	BASECFLAGS += -O -g3 -DPSM_DEBUG -D_HFI_DEBUGGING -funit-at-a-time -Wp,-D_FORTIFY_SOURCE=2
  else
--  BASECFLAGS += -O3 -g3
-+  BASECFLAGS += -O3 -g3 -Wp,-D_FORTIFY_SOURCE=2
+-	BASECFLAGS += -O3 -g3
++	BASECFLAGS += -O3 -g3 -Wp,-D_FORTIFY_SOURCE=2
  endif
  ifneq (,${PSM_COVERAGE}) # This check must come after PSM_DEBUG to override optimization setting
-   BASECFLAGS += -O -fprofile-arcs -ftest-coverage
+ 	BASECFLAGS += -O -fprofile-arcs -ftest-coverage
 --- a/compat/buildflags.mak
 +++ b/compat/buildflags.mak
-@@ -80,7 +80,7 @@
+@@ -72,7 +72,7 @@
  WERROR := -Werror
  INCLUDES := -I$(top_srcdir)/include -I$(top_srcdir)/include/$(os)-$(arch) -I$(top_srcdir)/mpspawn
  

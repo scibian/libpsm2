@@ -1,3 +1,17 @@
+libpsm2 (11.2.185-1-1ifs+deb9) stretch; urgency=medium
+
+  * New upstream version 11.2.185-1 from IFS RHEL77 10.10.3.1.1.
+
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Thu, 10 Dec 2020 13:20:04 -0600
+
+libpsm2 (11.2.156-1-1ifs+deb9) stretch; urgency=medium
+
+  * New upstream version 11.2.156-1 from IFS RHEL77 10.10.2.0.44.
+  * Patch fix-psm_finalize-segv.patch to fix libfabric fi_info
+    segmentation fault related to the psm provider.
+
+ -- Brian T. Smith <bsmith@systemfabricworks.com>  Mon, 22 Jun 2020 16:48:13 -0500
+
 libpsm2 (11.2.89-1-1ifs+deb9) stretch; urgency=medium
 
   * New upstream version 11.2.89-1 from IFS RHEL76 10.10.1.0.36.

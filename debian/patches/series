@@ -1,2 +1,3 @@
 fix-Makefile-version.patch
 fortify_source.patch
+remove_makefile_bashisms.patch
