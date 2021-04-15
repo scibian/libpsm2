@@ -1,3 +1,9 @@
+libpsm2 (11.2.185-1-1ifs+deb9sci9+opa10.10u1) scibian9+opa10.10; urgency=medium
+
+  * New release for scibian9+opa10.10
+
+ -- Rémi Palancher <remi-externe.palancher@edf.fr>  Thu, 15 Apr 2021 10:57:56 +0200
+
 libpsm2 (11.2.185-1-1ifs+deb9) stretch; urgency=medium
 
   * New upstream version 11.2.185-1 from IFS RHEL77 10.10.3.1.1.
