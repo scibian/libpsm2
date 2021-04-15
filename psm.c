@@ -65,11 +65,14 @@ static int psmi_verno = PSMI_VERNO_MAKE(PSM2_VERNO_MAJOR, PSM2_VERNO_MINOR);
 static int psmi_verno_client_val;
 int psmi_epid_ver;
 
+// Special psmi_refcount values
 #define PSMI_NOT_INITIALIZED    0
-#define PSMI_INITIALIZED        1
-#define PSMI_FINALIZED         -1	/* Prevent the user from calling psm2_init
-					 * once psm_finalize has been called. */
-static int psmi_isinit = PSMI_NOT_INITIALIZED;
+#define PSMI_FINALIZED         -1
+
+// PSM2 doesn't support transitioning out of the PSMI_FINALIZED state
+// once psmi_refcount is set to PSMI_FINALIZED, any further attempts to change
+// psmi_refcount should be treated as an error
+static int psmi_refcount = PSMI_NOT_INITIALIZED;
 
 /* Global lock used for endpoint creation and destroy
  * (in functions psm2_ep_open and psm2_ep_close) and also
@@ -84,16 +87,56 @@ uint64_t *shared_affinity_ptr;
 char *sem_affinity_shm_rw_name;
 char *affinity_shm_name;
 
+uint32_t psmi_cpu_model;
+
 #ifdef PSM_CUDA
 int is_cuda_enabled;
 int is_gdr_copy_enabled;
 int device_support_gpudirect;
+int gpu_p2p_supported = 0;
+int my_gpu_device = 0;
 int cuda_lib_version;
 int is_driver_gpudirect_enabled;
 int is_cuda_primary_context_retain = 0;
 uint32_t cuda_thresh_rndv;
 uint32_t gdr_copy_threshold_send;
 uint32_t gdr_copy_threshold_recv;
+
+void *psmi_cuda_lib;
+CUresult (*psmi_cuInit)(unsigned int  Flags );
+CUresult (*psmi_cuCtxDetach)(CUcontext c);
+CUresult (*psmi_cuCtxGetCurrent)(CUcontext *c);
+CUresult (*psmi_cuCtxSetCurrent)(CUcontext c);
+CUresult (*psmi_cuPointerGetAttribute)(void *data, CUpointer_attribute pa, CUdeviceptr p);
+CUresult (*psmi_cuPointerSetAttribute)(void *data, CUpointer_attribute pa, CUdeviceptr p);
+CUresult (*psmi_cuDeviceCanAccessPeer)(int *canAccessPeer, CUdevice dev, CUdevice peerDev);
+CUresult (*psmi_cuDeviceGet)(CUdevice* device, int  ordinal);
+CUresult (*psmi_cuDeviceGetAttribute)(int* pi, CUdevice_attribute attrib, CUdevice dev);
+CUresult (*psmi_cuDriverGetVersion)(int* driverVersion);
+CUresult (*psmi_cuDeviceGetCount)(int* count);
+CUresult (*psmi_cuStreamCreate)(CUstream* phStream, unsigned int Flags);
+CUresult (*psmi_cuStreamDestroy)(CUstream phStream);
+CUresult (*psmi_cuEventCreate)(CUevent* phEvent, unsigned int Flags);
+CUresult (*psmi_cuEventDestroy)(CUevent hEvent);
+CUresult (*psmi_cuEventQuery)(CUevent hEvent);
+CUresult (*psmi_cuEventRecord)(CUevent hEvent, CUstream hStream);
+CUresult (*psmi_cuEventSynchronize)(CUevent hEvent);
+CUresult (*psmi_cuMemHostAlloc)(void** pp, size_t bytesize, unsigned int Flags);
+CUresult (*psmi_cuMemFreeHost)(void* p);
+CUresult (*psmi_cuMemcpy)(CUdeviceptr dst, CUdeviceptr src, size_t ByteCount);
+CUresult (*psmi_cuMemcpyDtoD)(CUdeviceptr dstDevice, CUdeviceptr srcDevice, size_t ByteCount);
+CUresult (*psmi_cuMemcpyDtoH)(void* dstHost, CUdeviceptr srcDevice, size_t ByteCount);
+CUresult (*psmi_cuMemcpyHtoD)(CUdeviceptr dstDevice, const void* srcHost, size_t ByteCount);
+CUresult (*psmi_cuMemcpyDtoHAsync)(void* dstHost, CUdeviceptr srcDevice, size_t ByteCount, CUstream hStream);
+CUresult (*psmi_cuMemcpyHtoDAsync)(CUdeviceptr dstDevice, const void* srcHost, size_t ByteCount, CUstream hStream);
+CUresult (*psmi_cuIpcGetMemHandle)(CUipcMemHandle* pHandle, CUdeviceptr dptr);
+CUresult (*psmi_cuIpcOpenMemHandle)(CUdeviceptr* pdptr, CUipcMemHandle handle, unsigned int Flags);
+CUresult (*psmi_cuIpcCloseMemHandle)(CUdeviceptr dptr);
+CUresult (*psmi_cuMemGetAddressRange)(CUdeviceptr* pbase, size_t* psize, CUdeviceptr dptr);
+CUresult (*psmi_cuDevicePrimaryCtxGetState)(CUdevice dev, unsigned int* flags, int* active);
+CUresult (*psmi_cuDevicePrimaryCtxRetain)(CUcontext* pctx, CUdevice dev);
+CUresult (*psmi_cuCtxGetDevice)(CUdevice* device);
+CUresult (*psmi_cuDevicePrimaryCtxRelease)(CUdevice device);
 #endif
 
 /*
@@ -102,9 +145,8 @@ uint32_t gdr_copy_threshold_recv;
  * It is supposed to be filled with logical OR
  * on conditional compilation basis
  * along with future features/capabilities.
- * At the very beginning we start with Multi EPs.
  */
-uint64_t psm2_capabilities_bitset = PSM2_MULTI_EP_CAP;
+uint64_t psm2_capabilities_bitset = PSM2_MULTI_EP_CAP | PSM2_LIB_REFCOUNT_CAP;
 
 int psmi_verno_client()
 {
@@ -128,7 +170,7 @@ int psmi_verno_isinteroperable(uint16_t verno)
 
 int MOCKABLE(psmi_isinitialized)()
 {
-	return (psmi_isinit == PSMI_INITIALIZED);
+	return (psmi_refcount > 0);
 }
 MOCK_DEF_EPILOGUE(psmi_isinitialized);
 
@@ -169,6 +211,7 @@ int psmi_cuda_lib_load()
 	PSMI_CUDA_DLSYM(psmi_cuda_lib, cuCtxSetCurrent);
 	PSMI_CUDA_DLSYM(psmi_cuda_lib, cuPointerGetAttribute);
 	PSMI_CUDA_DLSYM(psmi_cuda_lib, cuPointerSetAttribute);
+	PSMI_CUDA_DLSYM(psmi_cuda_lib, cuDeviceCanAccessPeer);
 	PSMI_CUDA_DLSYM(psmi_cuda_lib, cuDeviceGetAttribute);
 	PSMI_CUDA_DLSYM(psmi_cuda_lib, cuDeviceGet);
 	PSMI_CUDA_DLSYM(psmi_cuda_lib, cuDeviceGetCount);
@@ -229,22 +272,26 @@ int psmi_cuda_initialize()
 		return err;
 	}
 
-	CUdevice device;
+	CUdevice current_device;
 	CUcontext primary_ctx;
-	PSMI_CUDA_CALL(cuCtxGetDevice, &device);
+	PSMI_CUDA_CALL(cuCtxGetDevice, &current_device);
 	int is_ctx_active;
 	unsigned ctx_flags;
-	PSMI_CUDA_CALL(cuDevicePrimaryCtxGetState, device, &ctx_flags, &is_ctx_active);
+	PSMI_CUDA_CALL(cuDevicePrimaryCtxGetState, current_device, &ctx_flags,
+			&is_ctx_active);
 	if (!is_ctx_active) {
 		/* There is an issue where certain CUDA API calls create
 		 * contexts but does not make it active which cause the
 		 * driver API call to fail with error 709 */
-		PSMI_CUDA_CALL(cuDevicePrimaryCtxRetain, &primary_ctx, device);
+		PSMI_CUDA_CALL(cuDevicePrimaryCtxRetain, &primary_ctx,
+				current_device);
 		is_cuda_primary_context_retain = 1;
 	}
 
 	/* Check if all devices support Unified Virtual Addressing. */
 	PSMI_CUDA_CALL(cuDeviceGetCount, &num_devices);
+
+	device_support_gpudirect = 1;
 
 	for (dev = 0; dev < num_devices; dev++) {
 		CUdevice device;
@@ -265,11 +312,24 @@ int psmi_cuda_initialize()
 				&major,
 				CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR,
 				device);
-		if (major >= 3)
-			device_support_gpudirect = 1;
-		else {
+		if (major < 3) {
 			device_support_gpudirect = 0;
-			_HFI_INFO("Device %d does not support GPUDirect RDMA (Non-fatal error) \n", dev);
+			_HFI_INFO("CUDA device %d does not support GPUDirect RDMA (Non-fatal error)\n", dev);
+		}
+
+		if (device != current_device) {
+			int canAccessPeer = 0;
+			PSMI_CUDA_CALL(cuDeviceCanAccessPeer, &canAccessPeer,
+					current_device, device);
+
+			if (canAccessPeer != 1)
+				_HFI_DBG("CUDA device %d does not support P2P from current device (Non-fatal error)\n", dev);
+			else
+				gpu_p2p_supported |= (1 << device);
+		} else {
+			/* Always support p2p on the same GPU */
+			my_gpu_device = device;
+			gpu_p2p_supported |= (1 << device);
 		}
 	}
 
@@ -336,10 +396,12 @@ psm2_error_t __psm2_init(int *major, int *minor)
 	GENERIC_PERF_SET_SLOT_NAME(PSM_TX_SPEEDPATH_CTR, "TX");
 	GENERIC_PERF_SET_SLOT_NAME(PSM_RX_SPEEDPATH_CTR, "RX");
 
-	if (psmi_isinit == PSMI_INITIALIZED)
+	if (psmi_refcount > 0) {
+		psmi_refcount++;
 		goto update;
+	}
 
-	if (psmi_isinit == PSMI_FINALIZED) {
+	if (psmi_refcount == PSMI_FINALIZED) {
 		err = PSM2_IS_FINALIZED;
 		goto fail;
 	}
@@ -363,10 +425,12 @@ psm2_error_t __psm2_init(int *major, int *minor)
 			"!!! WARNING !!! You are running an internal-only PSM *PROFILE* build.\n");
 #endif
 
+#ifdef PSM_FI
 	/* Make sure we complain if fault injection is enabled */
 	if (getenv("PSM2_FI") && !getenv("PSM2_NO_WARN"))
 		fprintf(stderr,
 			"!!! WARNING !!! You are running with fault injection enabled!\n");
+#endif /* #ifdef PSM_FI */
 
 	/* Make sure, as an internal check, that this version knows how to detect
 	 * compatibility with other library versions it may communicate with */
@@ -413,7 +477,7 @@ psm2_error_t __psm2_init(int *major, int *minor)
 				((id.eax & CPUID_EXMODEL_MASK) >> 12);
 	}
 
-	psmi_isinit = PSMI_INITIALIZED;
+	psmi_refcount++;
 	/* hfi_debug lives in libhfi.so */
 	psmi_getenv("PSM2_TRACEMASK",
 		    "Mask flags for tracing",
@@ -468,7 +532,9 @@ psm2_error_t __psm2_init(int *major, int *minor)
 
 	psmi_multi_ep_init();
 
+#ifdef PSM_FI
 	psmi_faultinj_init();
+#endif /* #ifdef PSM_FI */
 
 	psmi_epid_init();
 
@@ -496,7 +562,6 @@ psm2_error_t __psm2_init(int *major, int *minor)
 #endif
 
 update:
-
 	if (getenv("PSM2_IDENTIFY")) {
                 Dl_info info_psm;
 		char ofed_delta[100] = "";
@@ -533,6 +598,8 @@ update:
 	*major = (int)psmi_verno_major;
 	*minor = (int)psmi_verno_minor;
 fail:
+	_HFI_DBG("psmi_refcount=%d,err=%u\n", psmi_refcount, err);
+
 	PSM2_LOG_MSG("leaving");
 	return err;
 }
@@ -604,18 +671,21 @@ psm2_error_t __psm2_info_query(psm2_info_query_t q, void *out,
 	        2, /* PSM2_INFO_QUERY_MTU               */
 		2, /* PSM2_INFO_QUERY_LINK_SPEED        */
 		1, /* PSM2_INFO_QUERY_NETWORK_TYPE      */
+		0, /* PSM2_INFO_QUERY_FEATURE_MASK      */
 	};
 	psm2_error_t rv = PSM2_INTERNAL_ERR;
 
 	if ((q < 0) ||
-	    (q >= PSM2_INFO_QUERY_LAST) ||
-	    (nargs != expected_arg_cnt[q]))
-		return rv;
+	    (q >= PSM2_INFO_QUERY_LAST))
+		return 	PSM2_IQ_INVALID_QUERY;
+
+	if (nargs != expected_arg_cnt[q])
+		return PSM2_PARAM_ERR;
 
 	switch (q)
 	{
 	case PSM2_INFO_QUERY_NUM_UNITS:
-		*((uint32_t*)out) = psmi_hal_get_num_units_(1);
+		*((uint32_t*)out) = psmi_hal_get_num_units_();
 		rv = PSM2_OK;
 		break;
 	case PSM2_INFO_QUERY_NUM_PORTS:
@@ -719,7 +789,16 @@ psm2_error_t __psm2_info_query(psm2_info_query_t q, void *out,
 				rv = PSM2_OK;
 			}
 		}
-
+		break;
+	case PSM2_INFO_QUERY_FEATURE_MASK:
+		{
+#ifdef PSM_CUDA
+		*((uint32_t*)out) = PSM2_INFO_QUERY_FEATURE_CUDA;
+#else
+		*((uint32_t*)out) = 0;
+#endif /* #ifdef PSM_CUDA */
+		}
+		rv = PSM2_OK;
 		break;
 	default:
 		break;
@@ -743,7 +822,14 @@ psm2_error_t __psm2_finalize(void)
 
 	PSM2_LOG_MSG("entering");
 
+	_HFI_DBG("psmi_refcount=%d\n", psmi_refcount);
 	PSMI_ERR_UNLESS_INITIALIZED(NULL);
+	psmi_assert(psmi_refcount > 0);
+	psmi_refcount--;
+
+	if (psmi_refcount > 0) {
+		return PSM2_OK;
+	}
 
 	/* When PSM_PERF is enabled, the following line causes the
 	   instruction cycles gathered in the current run to be dumped
@@ -751,21 +837,23 @@ psm2_error_t __psm2_finalize(void)
 	GENERIC_PERF_DUMP(stderr);
 	ep = psmi_opened_endpoint;
 	while (ep != NULL) {
-		psmi_opened_endpoint = ep->user_ep_next;
+		psm2_ep_t saved_ep = ep->user_ep_next;
 		psm2_ep_close(ep, PSM2_EP_CLOSE_GRACEFUL,
 			     2 * PSMI_MIN_EP_CLOSE_TIMEOUT);
-		ep = psmi_opened_endpoint;
+		psmi_opened_endpoint = ep = saved_ep;
 	}
 
-	psmi_epid_fini();
-
+#ifdef PSM_FI
 	psmi_faultinj_fini();
+#endif /* #ifdef PSM_FI */
 
 	/* De-allocate memory for any allocated space to store hostnames */
 	psmi_epid_itor_init(&itor, PSMI_EP_HOSTNAME);
 	while ((hostname = psmi_epid_itor_next(&itor)))
 		psmi_free(hostname);
 	psmi_epid_itor_fini(&itor);
+
+	psmi_epid_fini();
 
 	/* unmap shared mem object for affinity */
 	if (psmi_affinity_shared_file_opened) {
@@ -807,15 +895,25 @@ psm2_error_t __psm2_finalize(void)
 	psmi_hal_finalize();
 #ifdef PSM_CUDA
 	if (is_cuda_primary_context_retain) {
+		/*
+		 * This code will be called during deinitialization, and if
+		 * CUDA is deinitialized before PSM, then
+		 * CUDA_ERROR_DEINITIALIZED will happen here
+		 */
 		CUdevice device;
-		PSMI_CUDA_CALL(cuCtxGetDevice, &device);
-		PSMI_CUDA_CALL(cuDevicePrimaryCtxRelease, device);
+		if (psmi_cuCtxGetDevice(&device) == CUDA_SUCCESS)
+			PSMI_CUDA_CALL(cuDevicePrimaryCtxRelease, device);
 	}
 #endif
 
-	psmi_isinit = PSMI_FINALIZED;
+	psmi_refcount = PSMI_FINALIZED;
 	PSM2_LOG_MSG("leaving");
 	psmi_log_fini();
+
+	psmi_stats_deregister_all();
+
+	psmi_heapdebug_finalize();
+
 	return PSM2_OK;
 }
 PSMI_API_DECL(psm2_finalize)

@@ -164,7 +164,7 @@ nthreads := $(shell echo $$(( `nproc` * 2 )) )
 # The DISTRO variable is used subsequently for variable
 # behaviors of the 3 distros.
 
-DISTRO := $(shell . /etc/os-release; echo $$ID)
+DISTRO := $(shell . /etc/os-release; if [[ "$$ID" == "sle_hpc" ]]; then ID="sles"; fi; echo $$ID)
 
 # By default the following two variables have the following values:
 LIBPSM2_COMPAT_CONF_DIR := /etc
@@ -277,7 +277,7 @@ OSVERSION := $(shell grep VERSION_ID /etc/os-release | cut -f 2 -d\" | cut -f 1 
 OSSUBVERSION := $(shell grep VERSION_ID /etc/os-release | cut -f 2 -d\" | cut -f 2 -d.)
 
 override RPM_NAME_BASEEXT := $(shell \
-    if [ "$(OS)" = "SLES" ]; then \
+    if [ "$(OS)" = "SLES" -o "$(OS)" = "SLE_HPC" ]; then \
        if [ $(OSVERSION) -gt 11 ]; then \
           if [ $(OSVERSION) -eq 12 ]; then \
              if [ $(OSSUBVERSION) -gt 2 ]; then \
@@ -483,7 +483,7 @@ dist: distclean
 	PRUNE_LIST="";										\
 	for pd in ".git" "cscope*" "$(shell realpath --relative-to=${top_srcdir} ${OUTDIR})"	\
 		"*.orig" "*~" "#*" ".gitignore" "doc" "libcm" "psm.supp" "test" "psm_hal_MOCK"	\
-		 "tools" "artifacts" "*.rej.patch"; do			\
+		 "psm_test" "tools" "artifacts" "*.rej.patch"; do			\
 		PRUNE_LIST="$$PRUNE_LIST -name $$pd -prune -o";					\
 	done;											\
 	for hid in psm_hal_* ; do								\
